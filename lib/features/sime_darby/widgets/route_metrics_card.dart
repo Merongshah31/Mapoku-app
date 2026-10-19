@@ -5,62 +5,94 @@ import '../../../core/theme/app_theme.dart';
 import '../models/sime_darby_hub.dart';
 import '../services/accessible_pathfinder.dart';
 
-/// Live hackathon metrics for the active route.
+/// Live metrics for the active route.
 ///
-/// Shows the township name and category, distance and estimated walk time,
-/// the accessibility score and the covered-walkway percentage — all recomputed
-/// from the A* result whenever the mode or the simulated obstacle changes.
+/// Distance, walk time, accessibility score and covered-walkway percentage,
+/// all recomputed from the A* result whenever the mode or the simulated
+/// obstacle changes.
 class RouteMetricsCard extends StatelessWidget {
   const RouteMetricsCard({
     super.key,
     required this.hub,
     required this.result,
     required this.accessibilityMode,
-    required this.obstacleActive,
-    required this.rerouted,
+    this.avoidedHazards = 0,
+    this.hazardsOnRoute = 0,
   });
 
   final SimeDarbyHub hub;
   final PathResult result;
   final bool accessibilityMode;
-  final bool obstacleActive;
-  final bool rerouted;
+
+  /// Reported obstacles the route was bent around.
+  final int avoidedHazards;
+
+  /// Reported obstacles the route still has to pass.
+  final int hazardsOnRoute;
 
   @override
   Widget build(BuildContext context) {
+    if (result.nodes.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.dangerSoft,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        ),
+        child: Row(
+          children: <Widget>[
+            const Icon(Icons.wrong_location_outlined, color: AppColors.danger),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                accessibilityMode
+                    ? 'No step-free route between these points right now.'
+                    : 'No walking route between these points right now.',
+                style: const TextStyle(
+                  color: AppColors.danger,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     final stepFree = result.stepFree;
+    final scoreColor = stepFree ? AppColors.success : AppColors.accent;
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.sdpCharcoal,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppColors.border),
       ),
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+        children: <Widget>[
           Row(
-            children: [
+            children: <Widget>[
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  children: <Widget>[
                     Text(
-                      hub.name.toUpperCase(),
+                      hub.name,
                       style: const TextStyle(
-                        color: AppColors.sdpRed,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 0.8,
+                        color: AppColors.textPrimary,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.2,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       hub.metricsSubtitle,
                       style: const TextStyle(
-                        color: AppColors.sdpGreyMid,
-                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        fontSize: 12,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -70,30 +102,36 @@ class RouteMetricsCard extends StatelessWidget {
               _ModeBadge(accessibilityMode: accessibilityMode),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 6),
           Text(
             hub.focusArea,
-            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 12.5,
+              height: 1.35,
+            ),
           ),
           const SizedBox(height: 14),
           Row(
-            children: [
+            children: <Widget>[
               _MetricTile(
-                label: 'DISTANCE',
-                value: AccessiblePathfinder.formatDistance(result.distanceMeters),
-                accent: AppColors.sdpRed,
+                label: 'Distance',
+                value: AccessiblePathfinder.formatDistance(
+                  result.distanceMeters,
+                ),
+                accent: AppColors.textPrimary,
               ),
               const SizedBox(width: 8),
               _MetricTile(
-                label: 'WALK TIME',
+                label: 'Walk time',
                 value: AccessiblePathfinder.formatMinutes(result.walkMinutes),
-                accent: AppColors.sdpRed,
+                accent: AppColors.textPrimary,
               ),
               const SizedBox(width: 8),
               _MetricTile(
-                label: 'ACCESSIBILITY',
+                label: 'Access score',
                 value: '${result.accessibilityScore}%',
-                accent: stepFree ? AppColors.routeAccessible : AppColors.construction,
+                accent: scoreColor,
               ),
             ],
           ),
@@ -103,28 +141,34 @@ class RouteMetricsCard extends StatelessWidget {
           Wrap(
             spacing: 8,
             runSpacing: 8,
-            children: [
+            children: <Widget>[
               _StatusPill(
-                icon: stepFree ? Icons.check_circle : Icons.warning_amber_rounded,
-                label: stepFree ? '100% Step-Free' : 'Includes stairs',
-                color: stepFree ? AppColors.routeAccessible : AppColors.construction,
+                icon: stepFree
+                    ? Icons.check_circle
+                    : Icons.warning_amber_rounded,
+                label: stepFree ? 'Step-free' : 'Includes stairs',
+                color: stepFree ? AppColors.success : AppColors.danger,
               ),
               _StatusPill(
                 icon: Icons.umbrella,
-                label: '${result.coveredPercent.round()}% Covered',
-                color: Colors.white,
+                label: '${result.coveredPercent.round()}% covered',
+                color: AppColors.primary,
               ),
-              if (obstacleActive)
-                const _StatusPill(
-                  icon: Icons.alt_route,
-                  label: 'REROUTED',
-                  color: AppColors.construction,
+              if (hazardsOnRoute > 0)
+                _StatusPill(
+                  icon: Icons.warning_amber_rounded,
+                  label: hazardsOnRoute == 1
+                      ? 'Passes 1 reported obstacle'
+                      : 'Passes $hazardsOnRoute reported obstacles',
+                  color: AppColors.danger,
                 )
-              else if (rerouted)
-                const _StatusPill(
+              else if (avoidedHazards > 0)
+                _StatusPill(
                   icon: Icons.alt_route,
-                  label: 'DETOUR ACTIVE',
-                  color: AppColors.construction,
+                  label: avoidedHazards == 1
+                      ? 'Rerouted around 1 report'
+                      : 'Rerouted around $avoidedHazards reports',
+                  color: AppColors.accent,
                 ),
             ],
           ),
@@ -141,26 +185,30 @@ class _ModeBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = accessibilityMode ? AppColors.routeAccessible : Colors.white;
+    final color = accessibilityMode
+        ? AppColors.primary
+        : AppColors.textSecondary;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: accessibilityMode ? AppColors.mint : AppColors.field,
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: color.withValues(alpha: 0.55)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(accessibilityMode ? Icons.accessible : Icons.directions_walk, size: 14, color: color),
-          const SizedBox(width: 6),
+        children: <Widget>[
+          Icon(
+            accessibilityMode ? Icons.accessible : Icons.directions_walk,
+            size: 14,
+            color: color,
+          ),
+          const SizedBox(width: 5),
           Text(
-            accessibilityMode ? 'OKU' : 'STANDARD',
+            accessibilityMode ? 'OKU route' : 'Standard',
             style: TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w900,
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
               color: color,
-              letterSpacing: 0.6,
             ),
           ),
         ],
@@ -170,7 +218,11 @@ class _ModeBadge extends StatelessWidget {
 }
 
 class _MetricTile extends StatelessWidget {
-  const _MetricTile({required this.label, required this.value, required this.accent});
+  const _MetricTile({
+    required this.label,
+    required this.value,
+    required this.accent,
+  });
 
   final String label;
   final String value;
@@ -180,28 +232,30 @@ class _MetricTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.06),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          color: AppColors.field,
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          children: <Widget>[
             Text(
               label,
               style: const TextStyle(
-                color: AppColors.sdpGreyMid,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
+                color: AppColors.textSecondary,
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             Text(
               value,
-              style: TextStyle(color: accent, fontSize: 17, fontWeight: FontWeight.w900),
+              style: TextStyle(
+                color: accent,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ],
         ),
@@ -219,23 +273,31 @@ class _CoveredBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
+      children: <Widget>[
         Row(
-          children: [
-            const Icon(Icons.umbrella, size: 13, color: AppColors.sdpGreyMid),
+          children: <Widget>[
+            const Icon(
+              Icons.umbrella,
+              size: 14,
+              color: AppColors.textSecondary,
+            ),
             const SizedBox(width: 6),
             const Text(
               'Covered walkway',
               style: TextStyle(
-                color: AppColors.sdpGreyMid,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
               ),
             ),
             const Spacer(),
             Text(
               '${percent.round()}%',
-              style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w800),
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+              ),
             ),
           ],
         ),
@@ -243,14 +305,19 @@ class _CoveredBar extends StatelessWidget {
         ClipRRect(
           borderRadius: BorderRadius.circular(999),
           child: TweenAnimationBuilder<double>(
-            tween: Tween<double>(begin: 0, end: (percent / 100).clamp(0.0, 1.0)),
+            tween: Tween<double>(
+              begin: 0,
+              end: (percent / 100).clamp(0.0, 1.0),
+            ),
             duration: const Duration(milliseconds: 600),
             curve: Curves.easeOutCubic,
             builder: (context, value, _) => LinearProgressIndicator(
               value: value,
               minHeight: 7,
-              backgroundColor: Colors.white.withValues(alpha: 0.1),
-              valueColor: const AlwaysStoppedAnimation<Color>(AppColors.routeAccessible),
+              backgroundColor: AppColors.field,
+              valueColor: const AlwaysStoppedAnimation<Color>(
+                AppColors.primary,
+              ),
             ),
           ),
         ),
@@ -260,7 +327,11 @@ class _CoveredBar extends StatelessWidget {
 }
 
 class _StatusPill extends StatelessWidget {
-  const _StatusPill({required this.icon, required this.label, required this.color});
+  const _StatusPill({
+    required this.icon,
+    required this.label,
+    required this.color,
+  });
 
   final IconData icon;
   final String label;
@@ -276,12 +347,16 @@ class _StatusPill extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 12, color: color),
+        children: <Widget>[
+          Icon(icon, size: 14, color: color),
           const SizedBox(width: 6),
           Text(
             label,
-            style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
           ),
         ],
       ),

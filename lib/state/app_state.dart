@@ -3,7 +3,10 @@ import 'package:latlong2/latlong.dart';
 
 import '../core/constants/app_config.dart';
 import '../data/demo_data.dart';
+import '../features/sime_darby/data/sime_darby_demo_data.dart';
+import '../features/sime_darby/models/sime_darby_hub.dart';
 import '../models/obstacle.dart';
+import '../models/profile.dart';
 import '../models/report.dart';
 import '../models/reward.dart';
 import '../services/mapoku_api_service.dart';
@@ -17,11 +20,9 @@ enum ServiceHealth { checking, online, offline }
 /// service health come from the backend when reachable and gracefully fall
 /// back to hardcoded data otherwise.
 class AppState extends ChangeNotifier {
-  AppState({
-    MapokuApiService? api,
-    RewardsRepository? rewards,
-  })  : _api = api ?? MapokuApiService(),
-        _rewards = rewards ?? RewardsRepository();
+  AppState({MapokuApiService? api, RewardsRepository? rewards})
+    : _api = api ?? MapokuApiService(),
+      _rewards = rewards ?? RewardsRepository();
 
   final MapokuApiService _api;
   final RewardsRepository _rewards;
@@ -31,6 +32,20 @@ class AppState extends ChangeNotifier {
   List<Redemption> _redemptions = const [];
   int get points => _points;
   List<Redemption> get redemptions => _redemptions;
+
+  // Profile (needs, route preferences, emergency contacts; stored on device)
+  UserProfile _profile = const UserProfile();
+  UserProfile get profile => _profile;
+
+  /// Name shown for the member: their chosen name, else the signed-in one.
+  String get memberName =>
+      _profile.name.isNotEmpty ? _profile.name : displayName;
+
+  Future<void> updateProfile(UserProfile Function(UserProfile) change) async {
+    _profile = change(_profile);
+    notifyListeners();
+    await _rewards.saveProfile(_profile);
+  }
 
   // Auth (demo only: identifies the community member)
   String? _userName;
@@ -43,7 +58,26 @@ class AppState extends ChangeNotifier {
   ServiceHealth get health => _health;
 
   // Map & reports
-  List<Obstacle> _communityObstacles = DemoData.communityObstacles;
+  /// Reports already on file for each Sime Darby hub, e.g. fenced-off works.
+  static final List<Obstacle> _hubReports = <Obstacle>[
+    for (final hub in SimeDarbyDemoData.hubs)
+      if (hub.simulatedEdge != null)
+        Obstacle(
+          id: 'sdp-${hub.id}',
+          type: ObstacleType.pathBlocked,
+          position: polylineMidpoint(hub.simulatedEdge!.geometry),
+          location: hub.simulationLabel,
+          description:
+              'Walkway fenced off for works\nTemporary barrier across the walkway. Use the detour.',
+          ago: '2 h ago',
+          confirms: 6,
+        ),
+  ];
+
+  List<Obstacle> _communityObstacles = [
+    ..._hubReports,
+    ...DemoData.communityObstacles,
+  ];
   List<Obstacle> get communityObstacles => _communityObstacles;
 
   final List<Report> _myReports = [...DemoData.myReports()];
@@ -55,6 +89,7 @@ class AppState extends ChangeNotifier {
   Future<void> init() async {
     _points = await _rewards.loadPoints();
     _redemptions = await _rewards.loadHistory();
+    _profile = await _rewards.loadProfile();
     final token = await _rewards.loadToken();
     if (token != null) _api.setToken(token);
     notifyListeners();
@@ -78,7 +113,13 @@ class AppState extends ChangeNotifier {
         maxLng: 101.9,
       );
       if (remote.isNotEmpty) {
-        _communityObstacles = remote;
+        final remoteIds = {for (final o in remote) o.id};
+        _communityObstacles = [
+          ...remote,
+          ..._communityObstacles.where(
+            (o) => o.id.startsWith('sdp-') && !remoteIds.contains(o.id),
+          ),
+        ];
         notifyListeners();
       }
     } catch (_) {
@@ -128,11 +169,14 @@ class AppState extends ChangeNotifier {
         type: type.label,
         icon: type.icon,
         location: location,
-        description: description.isEmpty ? 'Accessibility obstacle reported from mapOKU.' : description,
+        description: description.isEmpty
+            ? 'Accessibility obstacle reported from mapOKU.'
+            : description,
         imagePath: imagePath,
         createdAt: DateTime.now(),
         status: ReportStatus.pending,
         isMine: true,
+        position: position,
       ),
     );
 

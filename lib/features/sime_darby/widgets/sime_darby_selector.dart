@@ -1,18 +1,15 @@
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
+import 'package:pointer_interceptor/pointer_interceptor.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../models/sime_darby_hub.dart';
 
-/// Soft shadow used by every floating control over the full-screen map.
-const List<BoxShadow> _floatingShadow = <BoxShadow>[
-  BoxShadow(color: Color(0x3D000000), blurRadius: 14, offset: Offset(0, 5)),
-];
-
-/// Floating Sime Darby Property location pills, Google-Maps style.
+/// Frosted Sime Darby Property location chips floating over the 3D map.
 ///
-/// Renders over the top of the full-screen map: an optional brand banner plus
-/// a scrollable strip of hub pills. The banner collapses to a small toggle so
-/// the map stays completely unobstructed.
+/// A single horizontally scrollable strip; the selected chip is filled with the
+/// brand green so the active hub is obvious at a glance.
 class SimeDarbySelector extends StatelessWidget {
   const SimeDarbySelector({
     super.key,
@@ -31,82 +28,26 @@ class SimeDarbySelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        if (bannerVisible) ...<Widget>[
-          _BrandBanner(onHide: onToggleBanner),
+    return PointerInterceptor(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          _BrandBanner(expanded: bannerVisible, onToggle: onToggleBanner),
           const SizedBox(height: 8),
-        ],
-        Row(
-          children: <Widget>[
-            if (!bannerVisible) ...<Widget>[
-              _BannerToggle(onShow: onToggleBanner),
-              const SizedBox(width: 8),
-            ],
-            Expanded(
-              child: _PillStrip(
-                hubs: hubs,
-                selectedIndex: selectedIndex,
-                onChanged: onChanged,
+          SizedBox(
+            height: 44,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              itemCount: hubs.length,
+              separatorBuilder: (_, _) => const SizedBox(width: 8),
+              itemBuilder: (context, index) => _HubChip(
+                hub: hubs[index],
+                selected: index == selectedIndex,
+                onTap: () => onChanged(index),
               ),
             ),
-          ],
-        ),
-      ],
-    );
-  }
-}
-
-/// Collapsible "SIME DARBY PROPERTY" brand banner.
-class _BrandBanner extends StatelessWidget {
-  const _BrandBanner({required this.onHide});
-
-  final VoidCallback onHide;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-      decoration: BoxDecoration(
-        color: AppColors.sdpCharcoal.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: _floatingShadow,
-      ),
-      child: Row(
-        children: <Widget>[
-          Container(width: 4, height: 26, color: AppColors.sdpRed),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  'SIME DARBY PROPERTY',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-                SizedBox(height: 1),
-                Text(
-                  '3D Pedestrian & OKU Wayfinding Demo',
-                  style: TextStyle(
-                    color: AppColors.sdpGreyMid,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          _RoundIconButton(
-            icon: Icons.keyboard_arrow_up,
-            tooltip: 'Hide Sime Darby banner',
-            onTap: onHide,
           ),
         ],
       ),
@@ -114,39 +55,78 @@ class _BrandBanner extends StatelessWidget {
   }
 }
 
-/// Small floating button that brings the brand banner back.
-class _BannerToggle extends StatelessWidget {
-  const _BannerToggle({required this.onShow});
+/// "SIME DARBY PROPERTY" brand banner; collapses to a small chip.
+class _BrandBanner extends StatelessWidget {
+  const _BrandBanner({required this.expanded, required this.onToggle});
 
-  final VoidCallback onShow;
+  final bool expanded;
+  final VoidCallback onToggle;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: 'Show Sime Darby banner',
-      child: Material(
-        color: AppColors.sdpCharcoal.withValues(alpha: 0.94),
-        borderRadius: BorderRadius.circular(999),
-        elevation: 3,
-        shadowColor: const Color(0x66000000),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(999),
-          onTap: onShow,
-          child: const Padding(
-            padding: EdgeInsets.fromLTRB(11, 11, 12, 11),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                SizedBox(
-                  width: 8,
-                  height: 8,
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(color: AppColors.sdpRed, shape: BoxShape.circle),
-                  ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Material(
+            color: AppColors.surface.withValues(alpha: 0.9),
+            child: InkWell(
+              onTap: onToggle,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                child: Row(
+                  children: <Widget>[
+                    Container(
+                      width: 4,
+                      height: expanded ? 26 : 18,
+                      color: AppColors.sdpRed,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          const Text(
+                            'SIME DARBY PROPERTY',
+                            style: TextStyle(
+                              color: AppColors.textPrimary,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                          if (expanded)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 1),
+                              child: Text(
+                                '3D Pedestrian & OKU Wayfinding Demo',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Icon(
+                        expanded
+                            ? Icons.keyboard_arrow_up
+                            : Icons.keyboard_arrow_down,
+                        size: 20,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
-                SizedBox(width: 7),
-                Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.white),
-              ],
+              ),
             ),
           ),
         ),
@@ -155,133 +135,48 @@ class _BannerToggle extends StatelessWidget {
   }
 }
 
-/// Horizontally scrollable row of hub pills.
-class _PillStrip extends StatelessWidget {
-  const _PillStrip({
-    required this.hubs,
-    required this.selectedIndex,
-    required this.onChanged,
-  });
-
-  final List<SimeDarbyHub> hubs;
-  final int selectedIndex;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 44,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: EdgeInsets.zero,
-        itemCount: hubs.length,
-        separatorBuilder: (_, _) => const SizedBox(width: 8),
-        itemBuilder: (context, index) {
-          final hub = hubs[index];
-          return _HubPill(
-            label: hub.name,
-            selected: index == selectedIndex,
-            onTap: () => onChanged(index),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// A single floating hub pill.
-class _HubPill extends StatelessWidget {
-  const _HubPill({
-    required this.label,
+class _HubChip extends StatelessWidget {
+  const _HubChip({
+    required this.hub,
     required this.selected,
     required this.onTap,
   });
 
-  final String label;
+  final SimeDarbyHub hub;
   final bool selected;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final background = selected
-        ? Colors.white
-        : AppColors.sdpCharcoal.withValues(alpha: 0.9);
-
-    return Material(
-      color: background,
-      borderRadius: BorderRadius.circular(999),
-      elevation: 3,
-      shadowColor: const Color(0x59000000),
-      child: InkWell(
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: '${hub.name}, ${hub.subtitle}',
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(999),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 15),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(999),
-            border: Border.all(
-              color: selected ? AppColors.sdpRed : Colors.white.withValues(alpha: 0.22),
-              width: selected ? 2 : 1,
-            ),
-          ),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: <Widget>[
-              if (selected) ...<Widget>[
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: const BoxDecoration(
-                    color: AppColors.sdpRed,
-                    shape: BoxShape.circle,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Material(
+            color: selected
+                ? AppColors.primary
+                : AppColors.surface.withValues(alpha: 0.9),
+            child: InkWell(
+              onTap: onTap,
+              child: Container(
+                constraints: const BoxConstraints(minHeight: 44),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                alignment: Alignment.center,
+                child: Text(
+                  hub.name,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: selected ? Colors.white : AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(width: 8),
-              ],
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: selected ? AppColors.sdpCharcoal : Colors.white,
-                ),
               ),
-            ],
+            ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Translucent round icon button used inside the floating banner.
-class _RoundIconButton extends StatelessWidget {
-  const _RoundIconButton({
-    required this.icon,
-    required this.tooltip,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String tooltip;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onTap,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.1),
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, size: 18, color: Colors.white),
         ),
       ),
     );

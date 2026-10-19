@@ -3,15 +3,15 @@ import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 
-/// Accessibility need selected in the mapOKU search card.
+/// Accessibility need chosen in the trip planner.
 ///
-/// Kept in sync with the "Route Mode" toggle in the Quick Demo panel:
-/// every option except [standard] uses the OKU / wheelchair routing.
+/// This is the single control that decides the routing mode: every option
+/// except [standard] uses the OKU / wheelchair (step-free) routing.
 enum AccessibilityNeed {
   wheelchair('Wheelchair', Icons.accessible),
-  crutchesElderly('Crutches / Elderly', Icons.elderly),
-  visualTactile('Visual Impairment / Tactile', Icons.visibility),
-  standard('Standard Pedestrian', Icons.directions_walk);
+  crutchesElderly('Crutches / elderly', Icons.elderly),
+  visualTactile('Visual / tactile', Icons.visibility),
+  standard('Standard', Icons.directions_walk);
 
   const AccessibilityNeed(this.label, this.icon);
 
@@ -21,9 +21,8 @@ enum AccessibilityNeed {
   bool get isAccessible => this != AccessibilityNeed.standard;
 }
 
-/// mapOKU trip search card: From (Pin A) and To (Pin B) plus the
-/// accessibility need that drives the routing mode.
-class RouteSearchPanel extends StatefulWidget {
+/// Trip planner card: a connected From → To route plus the accessibility need.
+class RouteSearchPanel extends StatelessWidget {
   const RouteSearchPanel({
     super.key,
     required this.fromLabel,
@@ -40,173 +39,28 @@ class RouteSearchPanel extends StatefulWidget {
   final VoidCallback onVoiceTap;
 
   @override
-  State<RouteSearchPanel> createState() => _RouteSearchPanelState();
-}
-
-class _RouteSearchPanelState extends State<RouteSearchPanel> {
-  late final TextEditingController _from = TextEditingController(text: widget.fromLabel);
-  late final TextEditingController _to = TextEditingController(text: widget.toLabel);
-
-  @override
-  void didUpdateWidget(covariant RouteSearchPanel oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.fromLabel != widget.fromLabel) _from.text = widget.fromLabel;
-    if (oldWidget.toLabel != widget.toLabel) _to.text = widget.toLabel;
-  }
-
-  @override
-  void dispose() {
-    _from.dispose();
-    _to.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.sdpCharcoal,
-        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: <Widget>[
-          Row(
-            children: <Widget>[
-              const Icon(Icons.directions_walk, size: 18, color: AppColors.routeAccessible),
-              const SizedBox(width: 8),
-              Text(
-                'PLAN AN ACCESSIBLE TRIP',
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: Colors.white,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                    ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          _SearchField(
-            label: 'FROM',
-            controller: _from,
-            leading: Icons.mic,
-            leadingTooltip: 'Voice input for the start point',
-            onLeadingTap: widget.onVoiceTap,
-            accent: AppColors.forest,
-          ),
-          const SizedBox(height: 10),
-          _SearchField(
-            label: 'TO',
-            controller: _to,
-            leading: Icons.search,
-            leadingTooltip: 'Search the destination',
-            onLeadingTap: null,
-            trailing: Icons.mic,
-            trailingTooltip: 'Voice input for the destination',
-            onTrailingTap: widget.onVoiceTap,
-            accent: AppColors.accent,
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'ACCESSIBILITY NEED',
-            style: TextStyle(
-              color: AppColors.sdpGreyMid,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _NeedDropdown(value: widget.need, onChanged: widget.onNeedChanged),
-        ],
-      ),
-    );
-  }
-}
-
-/// A read-only mapOKU search box showing the active Pin address, with the
-/// microphone / magnifier affordances from the original app.
-class _SearchField extends StatelessWidget {
-  const _SearchField({
-    required this.label,
-    required this.controller,
-    required this.leading,
-    required this.accent,
-    required this.onLeadingTap,
-    this.leadingTooltip = 'Voice input',
-    this.trailing,
-    this.onTrailingTap,
-    this.trailingTooltip = 'Voice input',
-  });
-
-  final String label;
-  final TextEditingController controller;
-  final IconData leading;
-  final Color accent;
-  final VoidCallback? onLeadingTap;
-  final String leadingTooltip;
-  final IconData? trailing;
-  final VoidCallback? onTrailingTap;
-  final String trailingTooltip;
-
-  @override
-  Widget build(BuildContext context) {
-    final trailingIcon = trailing;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        Text(
-          label,
-          style: const TextStyle(
-            color: AppColors.sdpGreyMid,
-            fontSize: 10,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1,
-          ),
+        _RouteEndpoints(
+          fromLabel: fromLabel,
+          toLabel: toLabel,
+          onVoiceTap: onVoiceTap,
         ),
-        const SizedBox(height: 6),
-        Row(
+        const SizedBox(height: 16),
+        const _SectionLabel('Who is travelling?'),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
           children: <Widget>[
-            _IconAction(
-              icon: leading,
-              tooltip: leadingTooltip,
-              color: accent,
-              onTap: onLeadingTap,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 13),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-                ),
-                child: Text(
-                  controller.text,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
+            for (final option in AccessibilityNeed.values)
+              _NeedChip(
+                need: option,
+                selected: option == need,
+                onTap: () => onNeedChanged(option),
               ),
-            ),
-            if (trailingIcon != null) ...<Widget>[
-              const SizedBox(width: 8),
-              _IconAction(
-                icon: trailingIcon,
-                tooltip: trailingTooltip,
-                color: accent,
-                onTap: onTrailingTap,
-              ),
-            ],
           ],
         ),
       ],
@@ -214,89 +68,199 @@ class _SearchField extends StatelessWidget {
   }
 }
 
-class _IconAction extends StatelessWidget {
-  const _IconAction({
-    required this.icon,
-    required this.tooltip,
-    required this.color,
-    required this.onTap,
-  });
+class _SectionLabel extends StatelessWidget {
+  const _SectionLabel(this.text);
 
-  final IconData icon;
-  final String tooltip;
-  final Color color;
-  final VoidCallback? onTap;
+  final String text;
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: onTap,
-          child: Padding(
-            padding: const EdgeInsets.all(11),
-            child: Icon(icon, size: 18, color: color == AppColors.forest ? Colors.white : color),
-          ),
-        ),
+    return Text(
+      text,
+      style: const TextStyle(
+        color: AppColors.textSecondary,
+        fontSize: 12.5,
+        fontWeight: FontWeight.w700,
       ),
     );
   }
 }
 
-/// Fully controlled dropdown so it stays in sync with the Route Mode toggle.
-class _NeedDropdown extends StatelessWidget {
-  const _NeedDropdown({required this.value, required this.onChanged});
+/// Google-Maps-style connected From / To rows.
+class _RouteEndpoints extends StatelessWidget {
+  const _RouteEndpoints({
+    required this.fromLabel,
+    required this.toLabel,
+    required this.onVoiceTap,
+  });
 
-  final AccessibilityNeed value;
-  final ValueChanged<AccessibilityNeed> onChanged;
+  final String fromLabel;
+  final String toLabel;
+  final VoidCallback onVoiceTap;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.07),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppColors.border),
       ),
-      child: DropdownButton<AccessibilityNeed>(
-        value: value,
-        isExpanded: true,
-        underline: const SizedBox.shrink(),
-        dropdownColor: AppColors.sdpCharcoalSoft,
-        iconEnabledColor: Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 13.5,
-          fontWeight: FontWeight.w700,
-        ),
-        items: <DropdownMenuItem<AccessibilityNeed>>[
-          for (final need in AccessibilityNeed.values)
-            DropdownMenuItem<AccessibilityNeed>(
-              value: need,
-              child: Row(
+      child: Column(
+        children: <Widget>[
+          _EndpointRow(
+            label: 'From',
+            value: fromLabel,
+            marker: const _Dot(color: AppColors.primary),
+          ),
+          const Divider(height: 1, indent: 52),
+          _EndpointRow(
+            label: 'To',
+            value: toLabel,
+            marker: const Icon(
+              Icons.location_on,
+              size: 18,
+              color: AppColors.accent,
+            ),
+            trailing: Tooltip(
+              message: 'Say your destination',
+              child: IconButton(
+                onPressed: onVoiceTap,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                icon: const Icon(
+                  Icons.mic_none,
+                  size: 20,
+                  color: AppColors.primary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Dot extends StatelessWidget {
+  const _Dot({required this.color});
+
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 12,
+      height: 12,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: 3.5),
+      ),
+    );
+  }
+}
+
+class _EndpointRow extends StatelessWidget {
+  const _EndpointRow({
+    required this.label,
+    required this.value,
+    required this.marker,
+    this.trailing,
+  });
+
+  final String label;
+  final String value;
+  final Widget marker;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 56),
+      child: Row(
+        children: <Widget>[
+          SizedBox(width: 52, child: Center(child: marker)),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  Icon(
-                    need.icon,
-                    size: 16,
-                    color: need.isAccessible ? AppColors.routeAccessible : Colors.white70,
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      color: AppColors.textTertiary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(need.label, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 1),
+                  Text(
+                    value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
             ),
+          ),
+          trailing ?? const SizedBox(width: 12),
         ],
-        onChanged: (selected) {
-          if (selected != null) onChanged(selected);
-        },
+      ),
+    );
+  }
+}
+
+class _NeedChip extends StatelessWidget {
+  const _NeedChip({
+    required this.need,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final AccessibilityNeed need;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? Colors.white : AppColors.textPrimary;
+
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: need.label,
+      child: Material(
+        color: selected ? AppColors.primary : AppColors.field,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                Icon(need.icon, size: 17, color: foreground),
+                const SizedBox(width: 6),
+                Text(
+                  need.label,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: foreground,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

@@ -28,6 +28,7 @@ class Report {
     this.clearances = 0,
     this.flagReason,
     this.isMine = false,
+    this.position,
   });
 
   final String id;
@@ -43,11 +44,10 @@ class Report {
   final String? flagReason;
   final bool isMine;
 
-  Report copyWith({
-    int? confirmations,
-    int? clearances,
-    bool? isMine,
-  }) {
+  /// Where the obstacle is, when known (shown on the report detail map).
+  final LatLng? position;
+
+  Report copyWith({int? confirmations, int? clearances, bool? isMine}) {
     return Report(
       id: id,
       type: type,
@@ -61,6 +61,7 @@ class Report {
       clearances: clearances ?? this.clearances,
       flagReason: flagReason,
       isMine: isMine ?? this.isMine,
+      position: position,
     );
   }
 }

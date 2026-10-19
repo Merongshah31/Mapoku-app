@@ -2,16 +2,28 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../core/constants/app_colors.dart';
+import '../core/constants/app_config.dart';
 import '../core/theme/app_theme.dart';
 import '../data/demo_data.dart';
+import '../models/report.dart';
 import '../models/reward.dart';
 import '../state/app_scope.dart';
+import '../state/app_state.dart';
 import '../widgets/redeem_reward_sheet.dart';
-import '../widgets/reward_card.dart';
+import '../widgets/ui_kit.dart';
 
-/// Points wallet, reward catalogue and redemption history.
-class RewardsScreen extends StatelessWidget {
+enum _View { rewards, vouchers }
+
+/// Rewards tab: balance, ways to earn, rewards to redeem and your vouchers.
+class RewardsScreen extends StatefulWidget {
   const RewardsScreen({super.key});
+
+  @override
+  State<RewardsScreen> createState() => _RewardsScreenState();
+}
+
+class _RewardsScreenState extends State<RewardsScreen> {
+  _View _view = _View.rewards;
 
   @override
   Widget build(BuildContext context) {
@@ -29,101 +41,169 @@ class RewardsScreen extends StatelessWidget {
             style: Theme.of(context).textTheme.bodySmall,
           ),
           const SizedBox(height: 16),
-          _PointsHero(points: state.points, redemptions: state.redemptions.length),
-          const SizedBox(height: 14),
-          const _HowPointsWork(),
-          const SizedBox(height: 20),
-          Text('Redeem your points', style: Theme.of(context).textTheme.titleLarge),
-          const SizedBox(height: 12),
-          for (final reward in DemoData.rewards) ...[
-            RewardCard(
-              reward: reward,
-              points: state.points,
-              onRedeem: () => showModalBottomSheet<void>(
-                context: context,
-                isScrollControlled: true,
-                showDragHandle: true,
-                builder: (_) => RedeemRewardSheet(reward: reward),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
-          if (state.redemptions.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            Text('Your vouchers', style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: 12),
-            for (final redemption in state.redemptions)
-              _HistoryTile(redemption: redemption),
-          ],
+          _Balance(state: state),
+          const SectionTitle('Ways to earn'),
+          const _WaysToEarn(),
+          const SizedBox(height: 24),
+          SegmentTabs<_View>(
+            value: _view,
+            onChanged: (v) => setState(() => _view = v),
+            items: {
+              _View.rewards: ('Redeem', null),
+              _View.vouchers: ('Vouchers', state.redemptions.length),
+            },
+          ),
+          ...switch (_view) {
+            _View.rewards => _rewards(context, state),
+            _View.vouchers => _vouchers(context, state),
+          },
         ],
       ),
     );
   }
+
+  List<Widget> _rewards(BuildContext context, AppState state) => [
+    const SizedBox(height: 16),
+    AppGroup(
+      dividerIndent: 68,
+      children: [
+        for (final reward in DemoData.rewards)
+          _RewardRow(
+            reward: reward,
+            affordable: reward.canAfford(state.points),
+            onTap: () => showRedeemSheet(context, reward),
+          ),
+      ],
+    ),
+    const SectionFooter(
+      'Points unlock once other members confirm the obstacles you report, '
+      'which keeps reports honest. Partners fund the rewards, so they '
+      'cost you nothing.',
+    ),
+  ];
+
+  List<Widget> _vouchers(BuildContext context, AppState state) {
+    if (state.redemptions.isEmpty) {
+      return [
+        const SizedBox(height: 40),
+        const Icon(
+          Icons.card_giftcard_outlined,
+          size: 40,
+          color: AppColors.textTertiary,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Rewards you redeem are saved here, so you can find the code later.',
+          textAlign: TextAlign.center,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+      ];
+    }
+    return [
+      const SizedBox(height: 16),
+      AppGroup(
+        dividerIndent: 68,
+        children: [
+          for (final redemption in state.redemptions)
+            _VoucherRow(
+              redemption: redemption,
+              onTap: () => showVoucherSheet(context, redemption),
+            ),
+        ],
+      ),
+    ];
+  }
 }
 
-class _PointsHero extends StatelessWidget {
-  const _PointsHero({required this.points, required this.redemptions});
+// -----------------------------------------------------------------------------
+// Balance
+// -----------------------------------------------------------------------------
 
-  final int points;
-  final int redemptions;
+class _Balance extends StatelessWidget {
+  const _Balance({required this.state});
+
+  final AppState state;
 
   @override
   Widget build(BuildContext context) {
+    final points = state.points;
+    final sorted = [...DemoData.rewards]
+      ..sort((a, b) => a.cost.compareTo(b.cost));
+    final goal = sorted.where((r) => r.cost > points).firstOrNull;
+    final progress = goal == null ? 1.0 : (points / goal.cost).clamp(0.0, 1.0);
+    final verified = state.myReports
+        .where((r) => r.status == ReportStatus.verified)
+        .length;
+
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
       decoration: BoxDecoration(
         color: AppColors.forest,
-        borderRadius: BorderRadius.circular(AppTheme.radiusXl),
+        borderRadius: BorderRadius.circular(AppTheme.radiusLg),
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Positioned(
-            right: -30,
-            top: -30,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.05),
-                shape: BoxShape.circle,
+          const Text(
+            'Your points',
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white70,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Semantics(
+            label: '$points points',
+            excludeSemantics: true,
+            child: Text(
+              '$points',
+              style: const TextStyle(
+                fontSize: 52,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+                height: 1.1,
+                letterSpacing: -1,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              backgroundColor: Colors.white.withValues(alpha: 0.14),
+              valueColor: const AlwaysStoppedAnimation(Color(0xFF8CC2A0)),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            goal == null
+                ? 'Enough for any reward below.'
+                : '${goal.cost - points} more for ${goal.brand} ${goal.label}',
+            style: const TextStyle(fontSize: 12.5, color: Colors.white70),
+          ),
+          const SizedBox(height: 18),
+          const Divider(height: 1, thickness: 0.5, color: Color(0x33FFFFFF)),
+          const SizedBox(height: 14),
+          Row(
             children: [
-              Text(
-                'Points balance',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontWeight: FontWeight.w600,
+              Expanded(
+                child: _Stat(
+                  value: state.myReports.length,
+                  label: 'Reports sent',
                 ),
               ),
-              const SizedBox(height: 6),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(
-                    '$points',
-                    style: const TextStyle(
-                      fontSize: 48,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
-                      height: 1,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Text('🪙', style: TextStyle(fontSize: 26)),
-                ],
+              Expanded(
+                child: _Stat(value: verified, label: 'Confirmed'),
               ),
-              const SizedBox(height: 8),
-              Text(
-                redemptions == 0
-                    ? 'From community reports and confirmations'
-                    : '$redemptions reward${redemptions == 1 ? '' : 's'} redeemed',
-                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7)),
+              Expanded(
+                child: _Stat(
+                  value: state.redemptions.length,
+                  label: 'Vouchers',
+                ),
               ),
             ],
           ),
@@ -133,91 +213,280 @@ class _PointsHero extends StatelessWidget {
   }
 }
 
-class _HowPointsWork extends StatelessWidget {
-  const _HowPointsWork();
+class _Stat extends StatelessWidget {
+  const _Stat({required this.value, required this.label});
+
+  final int value;
+  final String label;
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.mint,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        '$value',
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          fontFeatures: [FontFeature.tabularFigures()],
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('How points work', style: Theme.of(context).textTheme.titleSmall),
-          const SizedBox(height: 8),
-          const _PointRow(icon: '🚨', text: 'Report an obstacle — earn +10 pts'),
-          const SizedBox(height: 6),
-          const _PointRow(icon: '✅', text: 'A report gets confirmed — earn +40 pts'),
-          const SizedBox(height: 6),
-          const _PointRow(icon: '👍', text: 'Confirm others — earn +2 pts'),
-        ],
-      ),
-    );
-  }
+      Text(label, style: const TextStyle(fontSize: 12, color: Colors.white70)),
+    ],
+  );
 }
 
-class _PointRow extends StatelessWidget {
-  const _PointRow({required this.icon, required this.text});
+// -----------------------------------------------------------------------------
+// Ways to earn
+// -----------------------------------------------------------------------------
 
-  final String icon;
-  final String text;
+class _WaysToEarn extends StatelessWidget {
+  const _WaysToEarn();
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return const AppGroup(
+      dividerIndent: 64,
       children: [
-        Text(icon, style: const TextStyle(fontSize: 16)),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(text, style: Theme.of(context).textTheme.bodySmall?.copyWith(color: AppColors.textPrimary)),
+        _EarnRow(
+          icon: Icons.warning_amber_rounded,
+          title: 'Report an obstacle',
+          detail: 'As soon as you send it',
+          points: AppConfig.pointsPerReport,
+        ),
+        _EarnRow(
+          icon: Icons.check_circle,
+          title: 'Your report is confirmed',
+          detail: 'When other members say it is still there',
+          points: AppConfig.pointsPerConfirmation,
+        ),
+        _EarnRow(
+          icon: Icons.thumb_up_alt_outlined,
+          title: "Check others' reports",
+          detail: 'Tell people if a barrier is still there',
+          points: 2,
         ),
       ],
     );
   }
 }
 
-class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({required this.redemption});
+class _EarnRow extends StatelessWidget {
+  const _EarnRow({
+    required this.icon,
+    required this.title,
+    required this.detail,
+    required this.points,
+  });
 
-  final Redemption redemption;
+  final IconData icon;
+  final String title;
+  final String detail;
+  final int points;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: AppColors.card,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.confirmation_number_outlined, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(redemption.label, style: Theme.of(context).textTheme.titleSmall),
-                const SizedBox(height: 2),
-                Text(
-                  '${redemption.code} · ${DateFormat('d MMM, h:mm a').format(redemption.redeemedAt)}',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+    return Semantics(
+      label: '$title, $points points. $detail',
+      excludeSemantics: true,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            _IconTile(
+              size: 36,
+              child: Icon(icon, size: 19, color: AppColors.primary),
             ),
-          ),
-          Text(
-            '-${redemption.cost} 🪙',
-            style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.textSecondary),
-          ),
-        ],
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: kBodyStyle),
+                  Text(detail, style: kFootnoteStyle),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              '+$points',
+              style: const TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+                color: AppColors.primary,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
+}
+
+// -----------------------------------------------------------------------------
+// Reward + voucher rows
+// -----------------------------------------------------------------------------
+
+class _RewardRow extends StatelessWidget {
+  const _RewardRow({
+    required this.reward,
+    required this.affordable,
+    required this.onTap,
+  });
+
+  final Reward reward;
+  final bool affordable;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      enabled: affordable,
+      label: affordable
+          ? '${reward.brand} ${reward.label}, ${reward.cost} points'
+          : '${reward.brand} ${reward.label}, ${reward.cost} points, not enough points yet',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: affordable ? onTap : null,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              _RewardIcon(reward),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(reward.label, style: kBodyStyle),
+                    Text(
+                      '${reward.brand}, simulated partner',
+                      style: kFootnoteStyle,
+                    ),
+                    if (reward.tagline.isNotEmpty) ...[
+                      const SizedBox(height: 2),
+                      Text(reward.tagline, style: kFootnoteStyle),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: affordable ? AppColors.primary : AppColors.field,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  '${reward.cost} pts',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: affordable ? Colors.white : AppColors.textTertiary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _VoucherRow extends StatelessWidget {
+  const _VoucherRow({required this.redemption, required this.onTap});
+
+  final Redemption redemption;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '${redemption.brand} ${redemption.label}, code ${redemption.code}',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            children: [
+              _IconTile(
+                size: 40,
+                child: Text(
+                  _emojiFor(redemption.rewardId),
+                  style: const TextStyle(fontSize: 20),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(redemption.label, style: kBodyStyle),
+                    Text(
+                      '${redemption.brand} · ${DateFormat('d MMM, h:mm a').format(redemption.redeemedAt)}',
+                      style: kFootnoteStyle,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: AppColors.textTertiary,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _emojiFor(String rewardId) {
+    for (final reward in DemoData.rewards) {
+      if (reward.id == rewardId) return reward.emoji;
+    }
+    return '🎟️';
+  }
+}
+
+class _RewardIcon extends StatelessWidget {
+  const _RewardIcon(this.reward);
+
+  final Reward reward;
+
+  @override
+  Widget build(BuildContext context) => _IconTile(
+    size: 40,
+    child: Text(reward.emoji, style: const TextStyle(fontSize: 20)),
+  );
+}
+
+class _IconTile extends StatelessWidget {
+  const _IconTile({required this.size, required this.child});
+
+  final double size;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(
+      color: AppColors.mint,
+      borderRadius: BorderRadius.circular(10),
+    ),
+    child: child,
+  );
 }

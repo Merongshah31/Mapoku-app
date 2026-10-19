@@ -5,6 +5,7 @@ import '../core/theme/app_theme.dart';
 import '../state/app_scope.dart';
 import '../widgets/mapoku_logo.dart';
 import '../widgets/points_pill.dart';
+import 'profile_screen.dart';
 import 'reports_screen.dart';
 import 'rewards_screen.dart';
 import 'routes_screen.dart';
@@ -24,7 +25,11 @@ class _ShellScreenState extends State<ShellScreen> {
 
   static const List<_NavTab> _tabs = [
     (label: 'Map', icon: Icons.map_outlined, activeIcon: Icons.map),
-    (label: 'Reports', icon: Icons.report_gmailerrorred_outlined, activeIcon: Icons.report_gmailerrorred),
+    (
+      label: 'Reports',
+      icon: Icons.report_gmailerrorred_outlined,
+      activeIcon: Icons.report_gmailerrorred,
+    ),
     (label: 'Rewards', icon: Icons.redeem_outlined, activeIcon: Icons.redeem),
   ];
 
@@ -33,7 +38,7 @@ class _ShellScreenState extends State<ShellScreen> {
     return Scaffold(
       body: Column(
         children: [
-          _ShellHeader(onAvatarTap: () => _showProfileSheet(context)),
+          _ShellHeader(onAvatarTap: () => _openProfile(context)),
           Expanded(
             child: IndexedStack(
               index: _index,
@@ -54,67 +59,7 @@ class _ShellScreenState extends State<ShellScreen> {
     );
   }
 
-  void _showProfileSheet(BuildContext context) {
-    final state = AppScope.of(context);
-    showModalBottomSheet<void>(
-      context: context,
-      showDragHandle: true,
-      builder: (sheetContext) => Padding(
-        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const MapokuLogo(height: 28),
-            const SizedBox(height: 16),
-            Text(
-              state.isLoggedIn ? state.displayName : 'Guest member',
-              style: Theme.of(sheetContext).textTheme.titleLarge,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              state.isLoggedIn
-                  ? 'Signed in · thanks for keeping the map accessible.'
-                  : 'Sign in to keep your points on every device.',
-              style: Theme.of(sheetContext).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 20),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.monetization_on_outlined, color: AppColors.primary),
-              title: const Text('Points balance'),
-              trailing: Text(
-                '${state.points} 🪙',
-                style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primary),
-              ),
-            ),
-            const ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Icon(Icons.favorite_border, color: AppColors.accent),
-              title: Text('Freedom to move, for everyone.'),
-              subtitle: Text('Supporting SDG 11 — Sustainable Cities'),
-            ),
-            const SizedBox(height: 8),
-            if (state.isLoggedIn)
-              OutlinedButton(onPressed: state.signOut, child: const Text('Log out'))
-            else
-              FilledButton(
-                onPressed: () {
-                  Navigator.of(sheetContext).pop();
-                  showModalBottomSheet<void>(
-                    context: context,
-                    isScrollControlled: true,
-                    showDragHandle: true,
-                    builder: (_) => const LoginSheet(),
-                  );
-                },
-                child: const Text('Sign in'),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
+  void _openProfile(BuildContext context) => ProfileScreen.open(context);
 }
 
 class _ShellHeader extends StatelessWidget {
@@ -151,7 +96,10 @@ class _ShellHeader extends StatelessWidget {
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.mintBorder),
                   ),
-                  child: const Icon(Icons.person_outline, color: AppColors.primary),
+                  child: const Icon(
+                    Icons.person_outline,
+                    color: AppColors.primary,
+                  ),
                 ),
               ),
             ],
@@ -248,71 +196,6 @@ class _NavButton extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// Simple demo sign-in sheet backed by the real login endpoint.
-class LoginSheet extends StatefulWidget {
-  const LoginSheet({super.key});
-
-  @override
-  State<LoginSheet> createState() => _LoginSheetState();
-}
-
-class _LoginSheetState extends State<LoginSheet> {
-  final _email = TextEditingController();
-  final _password = TextEditingController();
-
-  @override
-  void dispose() {
-    _email.dispose();
-    _password.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final state = AppScope.of(context);
-
-    return Padding(
-      padding: EdgeInsets.only(
-        left: 20,
-        right: 20,
-        top: 4,
-        bottom: MediaQuery.of(context).viewInsets.bottom + 24,
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Welcome back', style: Theme.of(context).textTheme.headlineSmall),
-          const SizedBox(height: 4),
-          const Text('Sign in to sync your reports and points.', style: TextStyle(color: AppColors.textSecondary)),
-          const SizedBox(height: 20),
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(hintText: 'you@example.com', prefixIcon: Icon(Icons.mail_outline)),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _password,
-            obscureText: true,
-            decoration: const InputDecoration(hintText: 'Password', prefixIcon: Icon(Icons.lock_outline)),
-          ),
-          const SizedBox(height: 20),
-          FilledButton(
-            onPressed: state.busy
-                ? null
-                : () async {
-                    await state.signIn(email: _email.text.trim(), password: _password.text);
-                    if (context.mounted) Navigator.of(context).pop();
-                  },
-            child: Text(state.busy ? 'Please wait…' : 'Sign in'),
-          ),
-        ],
       ),
     );
   }

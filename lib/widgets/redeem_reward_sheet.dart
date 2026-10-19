@@ -1,10 +1,63 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/theme/app_theme.dart';
 import '../models/reward.dart';
 import '../state/app_scope.dart';
+
+Future<void> showRedeemSheet(BuildContext context, Reward reward) {
+  return showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (_) => RedeemRewardSheet(reward: reward),
+  );
+}
+
+/// Shows a voucher the user already redeemed, with its code.
+Future<void> showVoucherSheet(BuildContext context, Redemption redemption) {
+  return showModalBottomSheet<void>(
+    context: context,
+    useSafeArea: true,
+    isScrollControlled: true,
+    builder: (ctx) => Padding(
+      padding: EdgeInsets.fromLTRB(
+        24,
+        0,
+        24,
+        24 + MediaQuery.paddingOf(ctx).bottom,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(redemption.label, style: Theme.of(ctx).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+            '${redemption.brand} · redeemed '
+            '${DateFormat('d MMM, h:mm a').format(redemption.redeemedAt)}',
+            style: Theme.of(ctx).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 20),
+          VoucherCodeBox(code: redemption.code),
+          const SizedBox(height: 10),
+          Text(
+            'Enter this code in the ${redemption.brand} app.',
+            textAlign: TextAlign.center,
+            style: Theme.of(ctx).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 20),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Done'),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
 /// Two-step redemption flow: confirm, then show the voucher code.
 class RedeemRewardSheet extends StatefulWidget {
@@ -18,23 +71,12 @@ class RedeemRewardSheet extends StatefulWidget {
 
 class _RedeemRewardSheetState extends State<RedeemRewardSheet> {
   Redemption? _redemption;
-  bool _copied = false;
 
-  void _confirm() {
+  void _redeem() {
     final redemption = AppScope.of(context).redeem(widget.reward);
     if (redemption == null) return;
+    HapticFeedback.mediumImpact();
     setState(() => _redemption = redemption);
-  }
-
-  Future<void> _copy() async {
-    final code = _redemption?.code;
-    if (code == null) return;
-    await Clipboard.setData(ClipboardData(text: code));
-    if (!mounted) return;
-    setState(() => _copied = true);
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) setState(() => _copied = false);
-    });
   }
 
   @override
@@ -42,173 +84,226 @@ class _RedeemRewardSheetState extends State<RedeemRewardSheet> {
     final redemption = _redemption;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
-      child: redemption == null
-          ? _ConfirmStep(
-              reward: widget.reward,
-              points: AppScope.of(context).points,
-              onConfirm: _confirm,
-              onCancel: () => Navigator.of(context).pop(),
-            )
-          : _SuccessStep(
-              redemption: redemption,
-              reward: widget.reward,
-              copied: _copied,
-              onCopy: _copy,
-              onDone: () => Navigator.of(context).pop(),
-            ),
+      padding: EdgeInsets.fromLTRB(
+        24,
+        0,
+        24,
+        24 + MediaQuery.paddingOf(context).bottom,
+      ),
+      child: AnimatedSize(
+        duration: MediaQuery.of(context).disableAnimations
+            ? Duration.zero
+            : const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: redemption == null ? _confirm() : _done(redemption),
+      ),
     );
   }
-}
 
-class _ConfirmStep extends StatelessWidget {
-  const _ConfirmStep({
-    required this.reward,
-    required this.points,
-    required this.onConfirm,
-    required this.onCancel,
-  });
-
-  final Reward reward;
-  final int points;
-  final VoidCallback onConfirm;
-  final VoidCallback onCancel;
-
-  @override
-  Widget build(BuildContext context) {
+  Widget _confirm() {
+    final reward = widget.reward;
     final theme = Theme.of(context);
+    final points = AppScope.of(context).points;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Color(reward.colorValue).withValues(alpha: 0.12),
-              shape: BoxShape.circle,
+        Row(
+          children: [
+            Container(
+              width: 48,
+              height: 48,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppColors.mint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(reward.emoji, style: const TextStyle(fontSize: 24)),
             ),
-            child: Text(reward.emoji, style: const TextStyle(fontSize: 34)),
-          ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(reward.label, style: theme.textTheme.titleMedium),
+                  Text(
+                    '${reward.brand}, simulated partner',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        const SizedBox(height: 16),
-        Center(
-          child: Column(
-            children: [
-              Text('Redeem ${reward.label}?', style: theme.textTheme.titleLarge, textAlign: TextAlign.center),
-              const SizedBox(height: 4),
-              Text('${reward.brand} · simulated partner', style: theme.textTheme.bodySmall),
-            ],
+        if (reward.tagline.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          Text(
+            reward.tagline,
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: AppColors.textSecondary,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: 20),
         Container(
-          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: AppColors.field,
             borderRadius: BorderRadius.circular(AppTheme.radiusMd),
           ),
           child: Column(
             children: [
-              _row('Cost', '${reward.cost} 🪙'),
-              const SizedBox(height: 10),
-              _row('Your balance', '$points 🪙'),
-              const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
-              _row('Balance after', '${points - reward.cost} 🪙', highlight: true),
+              _Line('Cost', '${reward.cost} pts'),
+              const Divider(height: 1, indent: 16),
+              _Line('Your points', '$points pts'),
+              const Divider(height: 1, indent: 16),
+              _Line(
+                'After redeeming',
+                '${points - reward.cost} pts',
+                emphasis: true,
+              ),
             ],
           ),
         ),
         const SizedBox(height: 20),
-        FilledButton(onPressed: onConfirm, child: const Text('Confirm redemption')),
-        TextButton(onPressed: onCancel, child: const Text('Cancel')),
+        FilledButton(
+          onPressed: _redeem,
+          child: Text('Redeem for ${reward.cost} points'),
+        ),
+        const SizedBox(height: 4),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
       ],
     );
   }
 
-  Widget _row(String label, String value, {bool highlight = false}) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _done(Redemption redemption) {
+    final reward = widget.reward;
+    final theme = Theme.of(context);
+    final points = AppScope.of(context).points;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: const TextStyle(color: AppColors.textSecondary)),
+        const Icon(Icons.check_circle, size: 56, color: AppColors.primary),
+        const SizedBox(height: 12),
         Text(
-          value,
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            color: highlight ? AppColors.primary : AppColors.textPrimary,
-          ),
+          'Redeemed',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.titleLarge,
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Enter this code in the ${reward.brand} app to claim your ${reward.label}. '
+          "It's also saved under Vouchers.",
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 20),
+        VoucherCodeBox(code: redemption.code),
+        const SizedBox(height: 10),
+        Text(
+          '$points points left',
+          textAlign: TextAlign.center,
+          style: theme.textTheme.bodySmall,
+        ),
+        const SizedBox(height: 20),
+        FilledButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Done'),
         ),
       ],
     );
   }
 }
 
-class _SuccessStep extends StatelessWidget {
-  const _SuccessStep({
-    required this.redemption,
-    required this.reward,
-    required this.copied,
-    required this.onCopy,
-    required this.onDone,
-  });
+/// Voucher code with a Copy button.
+class VoucherCodeBox extends StatefulWidget {
+  const VoucherCodeBox({super.key, required this.code});
 
-  final Redemption redemption;
-  final Reward reward;
-  final bool copied;
-  final VoidCallback onCopy;
-  final VoidCallback onDone;
+  final String code;
+
+  @override
+  State<VoucherCodeBox> createState() => _VoucherCodeBoxState();
+}
+
+class _VoucherCodeBoxState extends State<VoucherCodeBox> {
+  bool _copied = false;
+
+  Future<void> _copy() async {
+    await Clipboard.setData(ClipboardData(text: widget.code));
+    HapticFeedback.lightImpact();
+    if (!mounted) return;
+    setState(() => _copied = true);
+    await Future<void>.delayed(const Duration(seconds: 2));
+    if (mounted) setState(() => _copied = false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Center(
-          child: Container(
-            padding: const EdgeInsets.all(16),
-            decoration: const BoxDecoration(color: AppColors.mint, shape: BoxShape.circle),
-            child: const Icon(Icons.check_rounded, size: 34, color: AppColors.primary),
-          ),
-        ),
-        const SizedBox(height: 14),
-        Center(child: Text('Redeemed!', style: theme.textTheme.headlineSmall)),
-        const SizedBox(height: 6),
-        Text(
-          'Your ${reward.label} is ready. Show this code to claim it.',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.bodySmall,
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-          decoration: BoxDecoration(
-            color: AppColors.card,
-            borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-            border: Border.all(color: AppColors.primary, width: 2),
-          ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  redemption.code,
-                  style: const TextStyle(
-                    fontFamily: 'monospace',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                  ),
-                ),
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 6, 6, 6),
+      decoration: BoxDecoration(
+        color: AppColors.mint,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppColors.primary, width: 1.5),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: SelectableText(
+              widget.code,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.6,
+                color: AppColors.textPrimary,
               ),
-              TextButton(onPressed: onCopy, child: Text(copied ? 'Copied!' : 'Copy')),
-            ],
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        FilledButton(onPressed: onDone, child: const Text('Done')),
-      ],
+          TextButton.icon(
+            onPressed: _copy,
+            style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
+            icon: Icon(_copied ? Icons.check : Icons.copy_rounded, size: 18),
+            label: Text(_copied ? 'Copied' : 'Copy'),
+          ),
+        ],
+      ),
     );
   }
+}
+
+class _Line extends StatelessWidget {
+  const _Line(this.label, this.value, {this.emphasis = false});
+
+  final String label;
+  final String value;
+  final bool emphasis;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(color: AppColors.textSecondary),
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontWeight: emphasis ? FontWeight.w800 : FontWeight.w600,
+            color: emphasis ? AppColors.primary : AppColors.textPrimary,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    ),
+  );
 }

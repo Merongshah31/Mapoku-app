@@ -10,6 +10,35 @@ import '../../../services/location_service.dart';
 import '../data/sime_darby_demo_data.dart';
 import '../models/sime_darby_hub.dart';
 import '../services/accessible_pathfinder.dart';
+import '../services/route_hazards.dart';
+
+/// Close-up, heading-up camera used while a trip is being navigated.
+class NavCamera {
+  const NavCamera({
+    required this.position,
+    required this.bearing,
+    this.zoom = 19,
+    this.pitch = 65,
+  });
+
+  final geo.LatLng position;
+
+  /// Direction of travel in degrees; the map is rotated so it points up.
+  final double bearing;
+  final double zoom;
+  final double pitch;
+
+  @override
+  bool operator ==(Object other) =>
+      other is NavCamera &&
+      other.position == position &&
+      other.bearing == bearing &&
+      other.zoom == zoom &&
+      other.pitch == pitch;
+
+  @override
+  int get hashCode => Object.hash(position, bearing, zoom, pitch);
+}
 
 /// Real-world 3D street map for the Sime Darby Property demo.
 ///
@@ -26,7 +55,9 @@ class SimeDarbyMap extends StatefulWidget {
     required this.activeRoute,
     required this.alternateRoute,
     required this.accessibilityMode,
-    required this.obstacleActive,
+    this.hazards = const <RouteHazard>[],
+    this.onHazardTap,
+    this.navCamera,
     this.onNodeTap,
     this.onUserInteracted,
     this.bottomInset = 12,
@@ -42,7 +73,13 @@ class SimeDarbyMap extends StatefulWidget {
   final PathResult alternateRoute;
 
   final bool accessibilityMode;
-  final bool obstacleActive;
+
+  /// Community-reported obstacles on the hub's walkways.
+  final List<RouteHazard> hazards;
+  final ValueChanged<RouteHazard>? onHazardTap;
+
+  /// When set, the camera follows the trip in a close 3D heading-up view.
+  final NavCamera? navCamera;
 
   final ValueChanged<HubNode>? onNodeTap;
 
@@ -106,8 +143,12 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
   DateTime _lastOverlayUpdate = DateTime.fromMillisecondsSinceEpoch(0);
 
   bool get _stepFree => widget.activeRoute.stepFree;
-  String get _routeColor => _stepFree ? _availableRouteColor : _stairsRouteColor;
+  String get _routeColor =>
+      _stepFree ? _availableRouteColor : _stairsRouteColor;
   String get _casingColor => _stepFree ? '#065f46' : '#7f1d1d';
+
+  static String _hazardKey(List<RouteHazard> hazards) =>
+      hazards.map((h) => '${h.obstacle.id}:${h.impact.name}').join('|');
 
   @override
   void didUpdateWidget(covariant SimeDarbyMap oldWidget) {
@@ -115,10 +156,19 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     if (!_styleReady) return;
 
     final hubChanged = oldWidget.hub.id != widget.hub.id;
-    final routeChanged = oldWidget.activeRoute != widget.activeRoute ||
+    final routeChanged =
+        oldWidget.activeRoute != widget.activeRoute ||
         oldWidget.alternateRoute != widget.alternateRoute ||
-        oldWidget.obstacleActive != widget.obstacleActive;
+        _hazardKey(oldWidget.hazards) != _hazardKey(widget.hazards);
 
+    if (oldWidget.navCamera != widget.navCamera) {
+      final camera = widget.navCamera;
+      if (camera != null) {
+        _flyToNav(camera);
+      } else if (!hubChanged) {
+        _flyToHub();
+      }
+    }
     if (hubChanged) _flyToHub();
     if (hubChanged || routeChanged) {
       _refreshRouteSources();
@@ -201,19 +251,31 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     await controller.addLineLayer(
       _activeSource,
       _routeShadow,
-      LineLayerProperties(lineColor: '#000000', lineOpacity: 0.22, lineWidth: 26),
+      LineLayerProperties(
+        lineColor: '#000000',
+        lineOpacity: 0.22,
+        lineWidth: 26,
+      ),
     );
     await controller.addLineLayer(
       _activeSource,
       _routeCasing,
-      LineLayerProperties(lineColor: _casingColor, lineOpacity: 0.9, lineWidth: 16),
+      LineLayerProperties(
+        lineColor: _casingColor,
+        lineOpacity: 0.9,
+        lineWidth: 16,
+      ),
     );
     await controller.addLineLayer(
       _activeSource,
       _routeMain,
       LineLayerProperties(lineColor: _routeColor, lineOpacity: 1, lineWidth: 8),
     );
-    await controller.addLineLayer(_activeSource, _routeArrows, _arrowProperties(0));
+    await controller.addLineLayer(
+      _activeSource,
+      _routeArrows,
+      _arrowProperties(0),
+    );
 
     // Node locations on the map surface.
     await controller.addGeoJsonSource(_nodesSource, _emptyPoints());
@@ -249,7 +311,10 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     final controller = _controller;
     if (controller == null) return;
     try {
-      await controller.setGeoJsonSource(_activeSource, _lineFeature(widget.activeRoute.polyline));
+      await controller.setGeoJsonSource(
+        _activeSource,
+        _lineFeature(widget.activeRoute.polyline),
+      );
       await controller.setGeoJsonSource(
         _altSource,
         _lineFeature(widget.alternateRoute.polyline),
@@ -271,13 +336,46 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     try {
       await controller.setLayerProperties(
         _routeCasing,
-        LineLayerProperties(lineColor: _casingColor, lineOpacity: 0.9, lineWidth: 16),
+        LineLayerProperties(
+          lineColor: _casingColor,
+          lineOpacity: 0.9,
+          lineWidth: 16,
+        ),
       );
       await controller.setLayerProperties(
         _routeMain,
-        LineLayerProperties(lineColor: _routeColor, lineOpacity: 1, lineWidth: 8),
+        LineLayerProperties(
+          lineColor: _routeColor,
+          lineOpacity: 1,
+          lineWidth: 8,
+        ),
       );
     } catch (_) {}
+  }
+
+  /// Flies to a navigation step: close in, tilted, facing the way to walk.
+  Future<void> _flyToNav(NavCamera camera) async {
+    final controller = _controller;
+    if (controller == null) return;
+    _animatingCamera = true;
+    try {
+      await controller.animateCamera(
+        CameraUpdate.newCameraPosition(
+          CameraPosition(
+            target: _toMapLatLng(camera.position),
+            zoom: camera.zoom,
+            bearing: camera.bearing,
+            tilt: camera.pitch,
+          ),
+        ),
+        duration: const Duration(milliseconds: 1400),
+      );
+    } catch (_) {
+      // Camera animation is best-effort.
+    } finally {
+      _animatingCamera = false;
+      _lastProgrammaticMove = DateTime.now();
+    }
   }
 
   /// Smoothly flies the camera to the selected hub's real coordinates.
@@ -324,7 +422,10 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       if (controller == null || !mounted) return;
       _arrowFrame++;
       try {
-        await controller.setLayerProperties(_routeArrows, _arrowProperties(_arrowFrame));
+        await controller.setLayerProperties(
+          _routeArrows,
+          _arrowProperties(_arrowFrame),
+        );
       } catch (_) {}
     });
   }
@@ -344,7 +445,9 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
         ..hideCurrentSnackBar()
         ..showSnackBar(
           const SnackBar(
-            content: Text('Location permission is needed to centre on your position.'),
+            content: Text(
+              'Location permission is needed to centre on your position.',
+            ),
           ),
         );
       return;
@@ -378,8 +481,12 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
   List<HubNode> get _badgeNodes {
     final hub = widget.hub;
     return hub.nodes
-        .where((node) =>
-            node.stepFree && node.id != hub.startNodeId && node.id != hub.endNodeId)
+        .where(
+          (node) =>
+              node.stepFree &&
+              node.id != hub.startNodeId &&
+              node.id != hub.endNodeId,
+        )
         .toList();
   }
 
@@ -388,7 +495,8 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     if (controller == null || !_styleReady || !mounted) return;
 
     final now = DateTime.now();
-    if (!force && now.difference(_lastOverlayUpdate) < const Duration(milliseconds: 70)) {
+    if (!force &&
+        now.difference(_lastOverlayUpdate) < const Duration(milliseconds: 70)) {
       return;
     }
     _lastOverlayUpdate = now;
@@ -396,18 +504,20 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     final targets = <String, geo.LatLng>{
       'pinA': widget.hub.pinA,
       'pinB': widget.hub.pinB,
+      if (widget.navCamera != null) 'nav': widget.navCamera!.position,
       for (final node in _badgeNodes) 'node:${node.id}': node.position,
     };
 
-    final closed = widget.hub.simulatedEdge;
-    if (widget.obstacleActive && closed != null) {
-      targets['obstacle'] = polylineMidpoint(closed.geometry);
+    for (final hazard in widget.hazards) {
+      targets['hazard:${hazard.obstacle.id}'] = hazard.obstacle.position;
     }
 
     final next = <String, Offset>{};
     for (final entry in targets.entries) {
       try {
-        final point = await controller.toScreenLocation(_toMapLatLng(entry.value));
+        final point = await controller.toScreenLocation(
+          _toMapLatLng(entry.value),
+        );
         next[entry.key] = Offset(point.x.toDouble(), point.y.toDouble());
       } catch (_) {
         // Off-screen or behind the camera.
@@ -456,12 +566,27 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
 
     final pinA = _overlayPositions['pinA'];
     if (pinA != null) {
-      widgets.add(_positionedPin(pinA, 'A', AppColors.forest, widget.hub.startNodeId));
+      widgets.add(
+        _positionedPin(pinA, 'A', AppColors.forest, widget.hub.startNodeId),
+      );
     }
 
     final pinB = _overlayPositions['pinB'];
     if (pinB != null) {
-      widgets.add(_positionedPin(pinB, 'B', AppColors.accent, widget.hub.endNodeId));
+      widgets.add(
+        _positionedPin(pinB, 'B', AppColors.accent, widget.hub.endNodeId),
+      );
+    }
+
+    final me = _overlayPositions['nav'];
+    if (me != null && widget.navCamera != null) {
+      widgets.add(
+        Positioned(
+          left: me.dx - 14,
+          top: me.dy - 14,
+          child: const IgnorePointer(child: _YouAreHere()),
+        ),
+      );
     }
 
     for (final node in _badgeNodes) {
@@ -470,13 +595,19 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       widgets.add(_positionedBadge(position, node));
     }
 
-    final obstacle = _overlayPositions['obstacle'];
-    if (obstacle != null && widget.obstacleActive) {
+    for (final hazard in widget.hazards) {
+      final position = _overlayPositions['hazard:${hazard.obstacle.id}'];
+      if (position == null) continue;
       widgets.add(
         Positioned(
-          left: obstacle.dx - 22,
-          top: obstacle.dy - 54,
-          child: const _ConstructionBadge(),
+          left: position.dx - 18,
+          top: position.dy - 18,
+          child: GestureDetector(
+            onTap: widget.onHazardTap == null
+                ? null
+                : () => widget.onHazardTap!(hazard),
+            child: _HazardMarker(hazard: hazard),
+          ),
         ),
       );
     }
@@ -495,7 +626,12 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
   }
 
   /// Pin A / Pin B teardrop badge; the tip of the teardrop marks the coordinate.
-  Widget _positionedPin(Offset anchor, String letter, Color color, String nodeId) {
+  Widget _positionedPin(
+    Offset anchor,
+    String letter,
+    Color color,
+    String nodeId,
+  ) {
     final node = widget.hub.nodeById(nodeId);
     return Positioned(
       left: anchor.dx - 22,
@@ -515,8 +651,14 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       child: Align(
         alignment: Alignment.bottomCenter,
         child: GestureDetector(
-          onTap: widget.onNodeTap == null ? null : () => widget.onNodeTap!(node),
-          child: _NodeBadge(icon: node.icon, label: node.label, covered: node.covered),
+          onTap: widget.onNodeTap == null
+              ? null
+              : () => widget.onNodeTap!(node),
+          child: _NodeBadge(
+            icon: node.icon,
+            label: node.label,
+            covered: node.covered,
+          ),
         ),
       ),
     );
@@ -526,7 +668,8 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
   // GeoJSON helpers
   // ---------------------------------------------------------------------------
 
-  LatLng _toMapLatLng(geo.LatLng point) => LatLng(point.latitude, point.longitude);
+  LatLng _toMapLatLng(geo.LatLng point) =>
+      LatLng(point.latitude, point.longitude);
 
   Map<String, dynamic> _emptyLines() => _lineFeature(const <geo.LatLng>[]);
 
@@ -540,7 +683,8 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
           'geometry': <String, dynamic>{
             'type': 'LineString',
             'coordinates': <List<double>>[
-              for (final point in points) <double>[point.longitude, point.latitude],
+              for (final point in points)
+                <double>[point.longitude, point.latitude],
             ],
           },
         },
@@ -596,7 +740,11 @@ class _PinBadge extends StatelessWidget {
                 bottomLeft: Radius.circular(2),
               ),
               boxShadow: const <BoxShadow>[
-                BoxShadow(color: Color(0x45000000), blurRadius: 7, offset: Offset(0, 3)),
+                BoxShadow(
+                  color: Color(0x45000000),
+                  blurRadius: 7,
+                  offset: Offset(0, 3),
+                ),
               ],
             ),
             alignment: Alignment.center,
@@ -620,7 +768,11 @@ class _PinBadge extends StatelessWidget {
 
 /// Compact floating badge for a key accessibility node.
 class _NodeBadge extends StatelessWidget {
-  const _NodeBadge({required this.icon, required this.label, required this.covered});
+  const _NodeBadge({
+    required this.icon,
+    required this.label,
+    required this.covered,
+  });
 
   final String icon;
   final String label;
@@ -633,9 +785,16 @@ class _NodeBadge extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.sdpCharcoal.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: AppColors.routeAccessible.withValues(alpha: 0.75), width: 1.2),
+        border: Border.all(
+          color: AppColors.routeAccessible.withValues(alpha: 0.75),
+          width: 1.2,
+        ),
         boxShadow: const <BoxShadow>[
-          BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2)),
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 6,
+            offset: Offset(0, 2),
+          ),
         ],
       ),
       child: Row(
@@ -657,7 +816,11 @@ class _NodeBadge extends StatelessWidget {
           ),
           if (covered) ...<Widget>[
             const SizedBox(width: 5),
-            const Icon(Icons.umbrella, size: 10, color: AppColors.routeAccessible),
+            const Icon(
+              Icons.umbrella,
+              size: 10,
+              color: AppColors.routeAccessible,
+            ),
           ],
         ],
       ),
@@ -665,29 +828,65 @@ class _NodeBadge extends StatelessWidget {
   }
 }
 
-/// Hazard badge shown at the simulated construction barrier.
-class _ConstructionBadge extends StatelessWidget {
-  const _ConstructionBadge();
+/// Blue "you are here" dot shown while navigating.
+class _YouAreHere extends StatelessWidget {
+  const _YouAreHere();
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      width: 28,
+      height: 28,
       decoration: BoxDecoration(
-        color: AppColors.construction,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.sdpCharcoal, width: 1.5),
+        color: const Color(0xFF2563EB),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 4),
         boxShadow: const <BoxShadow>[
-          BoxShadow(color: Color(0x44000000), blurRadius: 6, offset: Offset(0, 2)),
+          BoxShadow(color: Color(0x662563EB), blurRadius: 14, spreadRadius: 4),
         ],
       ),
-      child: const Text(
-        '🚧 BLOCKED',
-        style: TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          color: AppColors.sdpCharcoal,
-          letterSpacing: 0.4,
+    );
+  }
+}
+
+/// Marker for a community-reported obstacle: a round hazard-coloured badge
+/// with the obstacle's icon. Red when the route still passes it, amber when
+/// the route was bent around it, grey when it is on a walkway not in use.
+class _HazardMarker extends StatelessWidget {
+  const _HazardMarker({required this.hazard});
+
+  final RouteHazard hazard;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = switch (hazard.impact) {
+      HazardImpact.onRoute => AppColors.danger,
+      HazardImpact.avoided => AppColors.construction,
+      HazardImpact.nearby => AppColors.sdpGreyMid,
+    };
+
+    return Semantics(
+      button: true,
+      label: '${hazard.obstacle.type.label} reported here',
+      child: Container(
+        width: 36,
+        height: 36,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: color,
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white, width: 2.5),
+          boxShadow: const <BoxShadow>[
+            BoxShadow(
+              color: Color(0x55000000),
+              blurRadius: 6,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Text(
+          hazard.obstacle.type.icon,
+          style: const TextStyle(fontSize: 17),
         ),
       ),
     );

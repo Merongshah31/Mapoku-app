@@ -12,6 +12,7 @@ class PathResult {
     required this.distanceMeters,
     required this.coveredMeters,
     required this.hasStairs,
+    this.edges = const <HubEdge>[],
   });
 
   /// The wayfinding nodes the route visits, in order.
@@ -28,13 +29,18 @@ class PathResult {
 
   final bool hasStairs;
 
+  /// The walkways the route uses, in order.
+  final List<HubEdge> edges;
+
   /// Average walking pace for a pedestrian using an accessible route.
   static const double _metresPerMinute = 72;
 
-  double get walkMinutes => distanceMeters <= 0 ? 0 : distanceMeters / _metresPerMinute;
+  double get walkMinutes =>
+      distanceMeters <= 0 ? 0 : distanceMeters / _metresPerMinute;
 
-  double get coveredPercent =>
-      distanceMeters <= 0 ? 0 : (coveredMeters / distanceMeters * 100).clamp(0, 100);
+  double get coveredPercent => distanceMeters <= 0
+      ? 0
+      : (coveredMeters / distanceMeters * 100).clamp(0, 100);
 
   /// 100% when the route is fully step-free, otherwise a reduced score.
   int get accessibilityScore => hasStairs ? 62 : 100;
@@ -45,8 +51,8 @@ class PathResult {
 /// A* pathfinding tuned for OKU / wheelchair wayfinding over real coordinates.
 ///
 /// In accessible mode stairs are treated as impassable and covered walkways
-/// receive a small cost bonus. In standard mode the shortest path wins, which
-/// is what makes the standard route "pass the stairs" in the demo. Every edge
+/// receive a small cost bonus. In standard mode the shortest path wins. Walkways
+/// closed by community reports are passed in as [findPath]'s `blockedEdges`. Every edge
 /// carries its own street-following geometry, so the winning path draws as a
 /// real street-aligned route.
 class AccessiblePathfinder {
@@ -55,7 +61,7 @@ class AccessiblePathfinder {
   PathResult? findPath({
     required SimeDarbyHub hub,
     required bool accessibleOnly,
-    bool obstacleActive = false,
+    Set<HubEdge> blockedEdges = const <HubEdge>{},
   }) {
     final nodes = {for (final node in hub.nodes) node.id: node};
     final start = hub.startNodeId;
@@ -65,7 +71,7 @@ class AccessiblePathfinder {
 
     final adjacency = <String, List<HubEdge>>{};
     for (final edge in hub.edges) {
-      if (obstacleActive && _isSimulationEdge(hub, edge)) continue;
+      if (blockedEdges.contains(edge)) continue;
       adjacency.putIfAbsent(edge.from, () => <HubEdge>[]).add(edge);
       adjacency.putIfAbsent(edge.to, () => <HubEdge>[]).add(edge);
     }
@@ -82,8 +88,15 @@ class AccessiblePathfinder {
     final closed = <String>{};
 
     while (open.isNotEmpty) {
-      open.sort((a, b) => _f(a, gScore, nodes, goal, heuristicScale)
-          .compareTo(_f(b, gScore, nodes, goal, heuristicScale)));
+      open.sort(
+        (a, b) => _f(
+          a,
+          gScore,
+          nodes,
+          goal,
+          heuristicScale,
+        ).compareTo(_f(b, gScore, nodes, goal, heuristicScale)),
+      );
       final current = open.removeAt(0);
 
       if (current == goal) return _reconstruct(cameFrom, nodes, start, goal);
@@ -124,7 +137,10 @@ class AccessiblePathfinder {
         final from = nodes[edge.from];
         final to = nodes[edge.to];
         if (from == null || to == null) continue;
-        final length = polylineLengthMeters(<LatLng>[from.position, to.position]);
+        final length = polylineLengthMeters(<LatLng>[
+          from.position,
+          to.position,
+        ]);
         if (length <= 0) continue;
         final ratio = cost / length;
         if (ratio < scale) scale = ratio;
@@ -144,7 +160,8 @@ class AccessiblePathfinder {
     final target = nodes[goal];
     if (node == null || target == null) return double.infinity;
     final heuristic =
-        polylineLengthMeters(<LatLng>[node.position, target.position]) * heuristicScale;
+        polylineLengthMeters(<LatLng>[node.position, target.position]) *
+        heuristicScale;
     return (g[id] ?? double.infinity) + heuristic;
   }
 
@@ -156,11 +173,6 @@ class AccessiblePathfinder {
       return edge.covered ? edge.lengthMeters * 0.9 : edge.lengthMeters;
     }
     return edge.lengthMeters;
-  }
-
-  bool _isSimulationEdge(SimeDarbyHub hub, HubEdge edge) {
-    if (hub.simulationEdge.length != 2) return false;
-    return edge.links(hub.simulationEdge[0], hub.simulationEdge[1]);
   }
 
   /// Rebuilds the winning path and concatenates each edge's real geometry so
@@ -185,12 +197,14 @@ class AccessiblePathfinder {
     var distance = 0.0;
     var covered = 0.0;
     var stairs = false;
+    final usedEdges = <HubEdge>[];
 
     for (var i = 1; i < ids.length; i++) {
       final fromId = ids[i - 1];
       final step = cameFrom[ids[i]];
       if (step == null) continue;
       final edge = step.$2;
+      usedEdges.add(edge);
 
       for (final point in edge.geometryFrom(fromId)) {
         if (polyline.isEmpty || polyline.last != point) polyline.add(point);
@@ -207,6 +221,7 @@ class AccessiblePathfinder {
       distanceMeters: distance,
       coveredMeters: covered,
       hasStairs: stairs,
+      edges: usedEdges,
     );
   }
 
