@@ -22,7 +22,7 @@ class PointsPill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text('🪙', style: TextStyle(fontSize: 18)),
+          const Icon(Icons.toll, size: 20, color: AppColors.primary),
           const SizedBox(width: 8),
           if (!compact)
             Column(
@@ -31,7 +31,7 @@ class PointsPill extends StatelessWidget {
               children: [
                 const Text(
                   'Your points',
-                  style: TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                 ),
                 Text(
                   '$points',

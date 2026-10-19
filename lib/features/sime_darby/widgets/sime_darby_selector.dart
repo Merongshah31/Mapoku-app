@@ -105,7 +105,7 @@ class _BrandBanner extends StatelessWidget {
                                 '3D Pedestrian & OKU Wayfinding Demo',
                                 style: TextStyle(
                                   color: AppColors.textSecondary,
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),

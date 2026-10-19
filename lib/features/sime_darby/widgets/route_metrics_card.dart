@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -41,7 +42,7 @@ class RouteMetricsCard extends StatelessWidget {
         ),
         child: Row(
           children: <Widget>[
-            const Icon(Icons.wrong_location_outlined, color: AppColors.danger),
+            const Icon(CupertinoIcons.location_slash, color: AppColors.danger),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -60,7 +61,7 @@ class RouteMetricsCard extends StatelessWidget {
     }
 
     final stepFree = result.stepFree;
-    final scoreColor = stepFree ? AppColors.success : AppColors.accent;
+    final scoreColor = stepFree ? AppColors.success : AppColors.accentText;
 
     return Container(
       decoration: BoxDecoration(
@@ -144,8 +145,8 @@ class RouteMetricsCard extends StatelessWidget {
             children: <Widget>[
               _StatusPill(
                 icon: stepFree
-                    ? Icons.check_circle
-                    : Icons.warning_amber_rounded,
+                    ? CupertinoIcons.checkmark_circle_fill
+                    : CupertinoIcons.exclamationmark_triangle_fill,
                 label: stepFree ? 'Step-free' : 'Includes stairs',
                 color: stepFree ? AppColors.success : AppColors.danger,
               ),
@@ -156,7 +157,7 @@ class RouteMetricsCard extends StatelessWidget {
               ),
               if (hazardsOnRoute > 0)
                 _StatusPill(
-                  icon: Icons.warning_amber_rounded,
+                  icon: CupertinoIcons.exclamationmark_triangle_fill,
                   label: hazardsOnRoute == 1
                       ? 'Passes 1 reported obstacle'
                       : 'Passes $hazardsOnRoute reported obstacles',
@@ -168,7 +169,7 @@ class RouteMetricsCard extends StatelessWidget {
                   label: avoidedHazards == 1
                       ? 'Rerouted around 1 report'
                       : 'Rerouted around $avoidedHazards reports',
-                  color: AppColors.accent,
+                  color: AppColors.accentText,
                 ),
             ],
           ),

@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 /// A redeemable reward in the mapOKU points catalogue.
 ///
 /// The catalogue is hardcoded for the hackathon demo so redemption never
@@ -8,7 +10,7 @@ class Reward {
     required this.brand,
     required this.label,
     required this.cost,
-    required this.emoji,
+    required this.icon,
     this.tagline = '',
     this.colorValue = 0xFF346F4B,
   });
@@ -17,7 +19,7 @@ class Reward {
   final String brand;
   final String label;
   final int cost;
-  final String emoji;
+  final IconData icon;
   final String tagline;
 
   /// ARGB colour used to tint the reward card.

@@ -1,18 +1,38 @@
+import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 /// The obstacle categories the community can report.
 ///
-/// Kept identical to the web app so data maps cleanly to the backend.
+/// The first four match the web app so existing data maps to the backend.
 enum ObstacleType {
-  noRamp('No ramp / stairs only', '⛔️'),
-  liftBroken('Lift broken', '🛗'),
-  pathBlocked('Path blocked', '🚧'),
-  unevenSurface('Uneven surface', '🕳');
+  noRamp('No ramp / stairs only', Icons.stairs),
+  liftBroken('Lift broken', Icons.elevator),
+  pathBlocked('Path blocked', Icons.block, blocksEveryone: true),
+  unevenSurface('Uneven surface', Icons.terrain),
+  constructionWorks(
+    'Construction works',
+    Icons.construction,
+    blocksEveryone: true,
+  ),
+  vehicleBlocking('Vehicle blocking the way', Icons.directions_car),
+  highKerb('No kerb ramp / high kerb', Icons.height),
+  steepSlope('Steep slope', Icons.trending_up),
+  narrowPath('Path too narrow', Icons.compare_arrows),
+  slipperyFloor('Wet or slippery floor', Icons.water_drop_outlined),
+  heavyDoor('Door hard to open', Icons.door_front_door_outlined),
+  noTactile('Missing tactile paving', Icons.blind),
+  poorLighting('Poor lighting', Icons.lightbulb_outline),
+  okuBayTaken('OKU bay or toilet unavailable', Icons.accessible),
+  other('Something else', Icons.help_outline);
 
-  const ObstacleType(this.label, this.icon);
+  const ObstacleType(this.label, this.icon, {this.blocksEveryone = false});
 
   final String label;
-  final String icon;
+  final IconData icon;
+
+  /// True when nobody can get past (not just wheelchair users), so even a
+  /// standard walking route should avoid it.
+  final bool blocksEveryone;
 
   static ObstacleType fromLabel(String? label) {
     return ObstacleType.values.firstWhere(

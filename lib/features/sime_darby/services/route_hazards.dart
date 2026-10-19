@@ -39,7 +39,7 @@ class RouteHazard {
 /// A report counts when it is pinned within [reachMeters] of a walkway, and
 /// it stops counting once more people say "it's gone" than "still there".
 /// Wheelchair routing treats every report as blocking; a standard pedestrian
-/// route only avoids paths that are fully blocked.
+/// route only avoids obstacles nobody can get past (blocked path, works).
 class RouteHazards {
   const RouteHazards._();
 
@@ -54,7 +54,7 @@ class RouteHazards {
 
     for (final report in reports) {
       if (report.clearances > report.confirms) continue;
-      if (!accessible && report.type != ObstacleType.pathBlocked) continue;
+      if (!accessible && !report.type.blocksEveryone) continue;
 
       HubEdge? nearest;
       var nearestDistance = reachMeters;

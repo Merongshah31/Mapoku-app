@@ -24,6 +24,9 @@ class AppColors {
 
   // Accents
   static const Color accent = Color(0xFFC27A45);
+
+  /// Accent for text on light/soft backgrounds (meets 4.5:1 contrast).
+  static const Color accentText = Color(0xFF8A4F1F);
   static const Color accentSoft = Color(0xFFF6EBD9);
   static const Color danger = Color(0xFFDC2626);
   static const Color dangerSoft = Color(0xFFFBE9E7);
@@ -32,8 +35,8 @@ class AppColors {
 
   // Text
   static const Color textPrimary = Color(0xFF1E2B22);
-  static const Color textSecondary = Color(0xFF68736B);
-  static const Color textTertiary = Color(0xFF9AA39C);
+  static const Color textSecondary = Color(0xFF59635D);
+  static const Color textTertiary = Color(0xFF6B766E);
 
   // Lines
   static const Color border = Color(0xFFE3E1D9);

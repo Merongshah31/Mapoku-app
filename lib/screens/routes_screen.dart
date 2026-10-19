@@ -1,5 +1,6 @@
 import 'dart:ui' show ImageFilter;
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
@@ -187,7 +188,6 @@ class _RoutesScreenState extends State<RoutesScreen> {
   Report _toReport(Obstacle obstacle) => Report(
     id: obstacle.id,
     type: obstacle.type.label,
-    icon: obstacle.type.icon,
     location: obstacle.location,
     description: obstacle.description,
     position: obstacle.position,
@@ -204,7 +204,7 @@ class _RoutesScreenState extends State<RoutesScreen> {
     final sent = await Navigator.of(context, rootNavigator: true).push<bool>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (_) => NewReportScreen(initialPosition: _hub.center),
+        builder: (_) => NewReportScreen(initialHub: _hub),
       ),
     );
     if (sent != true || !mounted) return;
@@ -238,9 +238,17 @@ class _RoutesScreenState extends State<RoutesScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
-            Text(
-              '${node.icon}  ${node.label}',
-              style: Theme.of(sheetContext).textTheme.titleLarge,
+            Row(
+              children: <Widget>[
+                Icon(node.iconData, size: 24, color: AppColors.primary),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    node.label,
+                    style: Theme.of(sheetContext).textTheme.titleLarge,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 6),
             Text(
@@ -250,8 +258,8 @@ class _RoutesScreenState extends State<RoutesScreen> {
             const SizedBox(height: 16),
             _NodeFact(
               icon: node.stepFree
-                  ? Icons.check_circle
-                  : Icons.warning_amber_rounded,
+                  ? CupertinoIcons.checkmark_circle_fill
+                  : CupertinoIcons.exclamationmark_triangle_fill,
               label: node.stepFree
                   ? 'Step-free waypoint'
                   : 'Stairs present — not OKU accessible',
@@ -582,7 +590,7 @@ class _SheetHeader extends StatelessWidget {
                       minimumSize: const Size(0, 44),
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                     ),
-                    icon: const Icon(Icons.navigation, size: 18),
+                    icon: const Icon(CupertinoIcons.location_north_fill, size: 18),
                     label: const Text('Start'),
                   ),
                 ],
@@ -723,7 +731,11 @@ class _NodeRow extends StatelessWidget {
               borderRadius: BorderRadius.circular(11),
             ),
             alignment: Alignment.center,
-            child: Text(node.icon, style: const TextStyle(fontSize: 17)),
+            child: Icon(
+              node.iconData,
+              size: 19,
+              color: onRoute ? AppColors.primary : AppColors.textSecondary,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -755,7 +767,7 @@ class _NodeRow extends StatelessWidget {
                           : AppColors.danger,
                     ),
                     if (node.covered)
-                      const _MiniTag(label: 'Covered', color: AppColors.accent),
+                      const _MiniTag(label: 'Covered', color: AppColors.accentText),
                   ],
                 ),
               ],

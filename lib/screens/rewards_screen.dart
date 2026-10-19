@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -87,7 +88,7 @@ class _RewardsScreenState extends State<RewardsScreen> {
       return [
         const SizedBox(height: 40),
         const Icon(
-          Icons.card_giftcard_outlined,
+          CupertinoIcons.gift,
           size: 40,
           color: AppColors.textTertiary,
         ),
@@ -250,19 +251,19 @@ class _WaysToEarn extends StatelessWidget {
       dividerIndent: 64,
       children: [
         _EarnRow(
-          icon: Icons.warning_amber_rounded,
+          icon: CupertinoIcons.exclamationmark_triangle_fill,
           title: 'Report an obstacle',
           detail: 'As soon as you send it',
           points: AppConfig.pointsPerReport,
         ),
         _EarnRow(
-          icon: Icons.check_circle,
+          icon: CupertinoIcons.checkmark_circle_fill,
           title: 'Your report is confirmed',
           detail: 'When other members say it is still there',
           points: AppConfig.pointsPerConfirmation,
         ),
         _EarnRow(
-          icon: Icons.thumb_up_alt_outlined,
+          icon: CupertinoIcons.hand_thumbsup,
           title: "Check others' reports",
           detail: 'Tell people if a barrier is still there',
           points: 2,
@@ -421,9 +422,10 @@ class _VoucherRow extends StatelessWidget {
             children: [
               _IconTile(
                 size: 40,
-                child: Text(
-                  _emojiFor(redemption.rewardId),
-                  style: const TextStyle(fontSize: 20),
+                child: Icon(
+                  _iconFor(redemption.rewardId),
+                  size: 21,
+                  color: AppColors.primary,
                 ),
               ),
               const SizedBox(width: 12),
@@ -441,7 +443,7 @@ class _VoucherRow extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               const Icon(
-                Icons.chevron_right,
+                CupertinoIcons.chevron_right,
                 size: 20,
                 color: AppColors.textTertiary,
               ),
@@ -452,11 +454,11 @@ class _VoucherRow extends StatelessWidget {
     );
   }
 
-  static String _emojiFor(String rewardId) {
+  static IconData _iconFor(String rewardId) {
     for (final reward in DemoData.rewards) {
-      if (reward.id == rewardId) return reward.emoji;
+      if (reward.id == rewardId) return reward.icon;
     }
-    return '🎟️';
+    return Icons.confirmation_number_outlined;
   }
 }
 
@@ -468,7 +470,7 @@ class _RewardIcon extends StatelessWidget {
   @override
   Widget build(BuildContext context) => _IconTile(
     size: 40,
-    child: Text(reward.emoji, style: const TextStyle(fontSize: 20)),
+    child: Icon(reward.icon, size: 21, color: AppColors.primary),
   );
 }
 

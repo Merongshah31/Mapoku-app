@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -49,6 +50,7 @@ class _MapokuAppState extends State<MapokuApp> {
         title: 'mapOKU',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
+        scrollBehavior: const _IosScrollBehavior(),
         home: const _Launch(),
       ),
     );
@@ -84,4 +86,28 @@ class _LaunchState extends State<_Launch> {
           : const SplashScreen(key: ValueKey('splash')),
     );
   }
+}
+
+/// Bouncing, iOS-style scrolling on every platform (mouse drag included).
+class _IosScrollBehavior extends MaterialScrollBehavior {
+  const _IosScrollBehavior();
+
+  @override
+  ScrollPhysics getScrollPhysics(BuildContext context) =>
+      const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics());
+
+  @override
+  Widget buildOverscrollIndicator(
+    BuildContext context,
+    Widget child,
+    ScrollableDetails details,
+  ) => child;
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+    PointerDeviceKind.stylus,
+  };
 }

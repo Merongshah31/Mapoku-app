@@ -1,4 +1,7 @@
+import 'package:flutter/widgets.dart';
 import 'package:latlong2/latlong.dart';
+
+import 'obstacle.dart';
 
 /// Verification state of a report as shown in the "My Reports" tab.
 enum ReportStatus {
@@ -18,7 +21,6 @@ class Report {
   const Report({
     required this.id,
     required this.type,
-    this.icon = '📍',
     this.location = '',
     this.description = '',
     this.imagePath,
@@ -33,7 +35,6 @@ class Report {
 
   final String id;
   final String type;
-  final String icon;
   final String location;
   final String description;
   final String? imagePath;
@@ -44,6 +45,9 @@ class Report {
   final String? flagReason;
   final bool isMine;
 
+  /// Icon for this report's category.
+  IconData get icon => ObstacleType.fromLabel(type).icon;
+
   /// Where the obstacle is, when known (shown on the report detail map).
   final LatLng? position;
 
@@ -51,7 +55,6 @@ class Report {
     return Report(
       id: id,
       type: type,
-      icon: icon,
       location: location,
       description: description,
       imagePath: imagePath,

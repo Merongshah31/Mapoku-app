@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 
 /// Shared geodesic calculator for real-world route geometry.
@@ -42,7 +43,6 @@ class HubNode {
     required this.label,
     required this.position,
     required this.kind,
-    this.icon = '📍',
     this.stepFree = true,
     this.covered = false,
   });
@@ -54,9 +54,22 @@ class HubNode {
   final LatLng position;
 
   final NodeKind kind;
-  final String icon;
   final bool stepFree;
   final bool covered;
+
+  /// Icon for this kind of wayfinding point.
+  IconData get iconData => switch (kind) {
+    NodeKind.bridge => Icons.linear_scale,
+    NodeKind.walkway => Icons.directions_walk,
+    NodeKind.ramp => Icons.ramp_right,
+    NodeKind.lift => Icons.elevator,
+    NodeKind.entrance => Icons.meeting_room_outlined,
+    NodeKind.dropOff => Icons.airport_shuttle,
+    NodeKind.crossing => Icons.traffic,
+    NodeKind.promenade => Icons.park_outlined,
+    NodeKind.lobby => Icons.apartment,
+    NodeKind.station => Icons.directions_transit,
+  };
 }
 
 /// A walkable connection between two nodes, carrying the dense

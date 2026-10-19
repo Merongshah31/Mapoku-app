@@ -113,12 +113,19 @@ class AppState extends ChangeNotifier {
         maxLng: 101.9,
       );
       if (remote.isNotEmpty) {
+        // Only keep backend reports that are at one of our sites; everything
+        // already on the device (demo, site and your own reports) stays.
         final remoteIds = {for (final o in remote) o.id};
-        _communityObstacles = [
-          ...remote,
-          ..._communityObstacles.where(
-            (o) => o.id.startsWith('sdp-') && !remoteIds.contains(o.id),
+        const distance = Distance();
+        final nearSites = remote.where(
+          (o) => SimeDarbyDemoData.hubs.any(
+            (hub) =>
+                distance.as(LengthUnit.Meter, hub.center, o.position) < 3000,
           ),
+        );
+        _communityObstacles = [
+          ...nearSites,
+          ..._communityObstacles.where((o) => !remoteIds.contains(o.id)),
         ];
         notifyListeners();
       }
@@ -167,7 +174,6 @@ class AppState extends ChangeNotifier {
       Report(
         id: id,
         type: type.label,
-        icon: type.icon,
         location: location,
         description: description.isEmpty
             ? 'Accessibility obstacle reported from mapOKU.'

@@ -1,71 +1,83 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/constants/app_config.dart';
 import '../core/theme/app_theme.dart';
+import '../features/sime_darby/data/sime_darby_demo_data.dart';
+import '../features/sime_darby/models/sime_darby_hub.dart';
 import '../models/obstacle.dart';
 import '../models/report.dart';
 import '../services/geocoding_service.dart';
-import '../services/location_service.dart';
 import '../state/app_scope.dart';
 import '../widgets/report_card.dart';
 import '../widgets/ui_kit.dart';
 
-enum _Fix { locating, gps, moved, searched, preset, unavailable }
-
 /// Full-screen form for a new obstacle report. Pops with `true` once sent.
+///
+/// The location is picked from the Sime Darby Property sites and the
+/// wayfinding point nearest the barrier, so no coordinates are typed.
 class NewReportScreen extends StatefulWidget {
-  const NewReportScreen({super.key, this.initialPosition});
+  const NewReportScreen({super.key, this.initialHub});
 
-  /// Start the pin here (e.g. the area being viewed) instead of using GPS.
-  final LatLng? initialPosition;
+  /// Preselects this site (e.g. the one being viewed on the route map).
+  final SimeDarbyHub? initialHub;
 
   @override
   State<NewReportScreen> createState() => _NewReportScreenState();
 }
 
-class _NewReportScreenState extends State<NewReportScreen> {
-  static const LatLng _defaultPin = LatLng(3.118, 101.696);
+/// Where the obstacle is: a named place and the point it sits at.
+class _Place {
+  const _Place({
+    required this.label,
+    required this.position,
+    this.icon = CupertinoIcons.location_solid,
+    this.site,
+  });
 
-  final _map = MapController();
-  final _geocoder = GeocodingService();
+  final String label;
+  final LatLng position;
+  final IconData icon;
+
+  /// Sime Darby site the place belongs to, if it is one of ours.
+  final String? site;
+
+  String get fullName => site == null ? label : '$label · $site';
+}
+
+class _NewReportScreenState extends State<NewReportScreen> {
   final _picker = ImagePicker();
-  final _place = TextEditingController();
+  final _geocoder = GeocodingService();
+  final _search = TextEditingController();
   final _summary = TextEditingController();
   final _details = TextEditingController();
 
-  LatLng _pin = _defaultPin;
-  _Fix _fix = _Fix.locating;
-  bool _mapReady = false;
+  late SimeDarbyHub _hub = widget.initialHub ?? SimeDarbyDemoData.hubs.first;
+  _Place? _place;
   ObstacleType? _type;
   String? _photoPath;
-  List<PlaceSuggestion> _suggestions = const [];
+
   Timer? _debounce;
+  List<PlaceSuggestion> _remote = const [];
+  bool _searching = false;
 
   @override
   void initState() {
     super.initState();
     _summary.addListener(() => setState(() {}));
-    final start = widget.initialPosition;
-    if (start != null) {
-      _pin = start;
-      _fix = _Fix.preset;
-    } else {
-      _locate();
-    }
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
-    _place.dispose();
+    _search.dispose();
     _summary.dispose();
     _details.dispose();
     super.dispose();
@@ -73,53 +85,56 @@ class _NewReportScreenState extends State<NewReportScreen> {
 
   // ------------------------------------------------------------ location
 
-  Future<void> _locate() async {
-    setState(() => _fix = _Fix.locating);
-    final here = await const LocationService().currentLatLng();
-    if (!mounted) return;
-    if (here == null) {
-      setState(() => _fix = _Fix.unavailable);
-      return;
-    }
-    setState(() {
-      _pin = here;
-      _fix = _Fix.gps;
-    });
-    if (_mapReady) _map.move(here, 17);
+  String get _query => _search.text.trim();
+
+  _Place _siteSpot(SimeDarbyHub hub, HubNode node) => _Place(
+    label: node.label,
+    position: node.position,
+    icon: node.iconData,
+    site: hub.name,
+  );
+
+  /// Our own named points that match what was typed, across every site.
+  List<_Place> get _localMatches {
+    final q = _query.toLowerCase();
+    return [
+      for (final hub in SimeDarbyDemoData.hubs)
+        for (final node in hub.nodes)
+          if (node.label.toLowerCase().contains(q) ||
+              hub.name.toLowerCase().contains(q))
+            _siteSpot(hub, node),
+    ];
   }
 
-  String get _fixText => switch (_fix) {
-    _Fix.locating => 'Finding your location…',
-    _Fix.gps => 'From your GPS. Move the map if the pin is off.',
-    _Fix.moved => 'Set by moving the map.',
-    _Fix.searched => 'Set from the place you searched.',
-    _Fix.preset =>
-      'Starts at the area you were looking at. Move the map to the barrier.',
-    _Fix.unavailable =>
-      'Location is off, so this is a default spot. Move the map to where the barrier is.',
-  };
-
-  void _onPlaceChanged(String value) {
+  void _onQueryChanged(String value) {
     _debounce?.cancel();
-    if (value.trim().length < 2) {
-      setState(() => _suggestions = const []);
+    if (value.trim().length < 3) {
+      setState(() {
+        _remote = const [];
+        _searching = false;
+      });
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 350), () async {
+    setState(() => _searching = true);
+    _debounce = Timer(const Duration(milliseconds: 450), () async {
       final results = await _geocoder.search(value, limit: 5);
-      if (mounted) setState(() => _suggestions = results);
+      if (!mounted) return;
+      setState(() {
+        _remote = results;
+        _searching = false;
+      });
     });
   }
 
-  void _selectSuggestion(PlaceSuggestion suggestion) {
+  void _choose(_Place place) {
     FocusScope.of(context).unfocus();
+    _debounce?.cancel();
     setState(() {
-      _place.text = suggestion.label.split(',').first.trim();
-      _pin = suggestion.position;
-      _fix = _Fix.searched;
-      _suggestions = const [];
+      _place = place;
+      _search.clear();
+      _remote = const [];
+      _searching = false;
     });
-    if (_mapReady) _map.move(suggestion.position, 17);
   }
 
   // ------------------------------------------------------------ photo
@@ -149,35 +164,29 @@ class _NewReportScreenState extends State<NewReportScreen> {
   }
 
   void _choosePhoto() {
-    showModalBottomSheet<void>(
+    showCupertinoModalPopup<void>(
       context: context,
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: const Icon(
-                Icons.photo_camera_outlined,
-                color: AppColors.primary,
-              ),
-              title: const Text('Take photo'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pick(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.photo_library_outlined,
-                color: AppColors.primary,
-              ),
-              title: const Text('Choose from library'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pick(ImageSource.gallery);
-              },
-            ),
-          ],
+      builder: (ctx) => CupertinoActionSheet(
+        actions: [
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pick(ImageSource.camera);
+            },
+            child: const Text('Take photo'),
+          ),
+          CupertinoActionSheetAction(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _pick(ImageSource.gallery);
+            },
+            child: const Text('Choose from library'),
+          ),
+        ],
+        cancelButton: CupertinoActionSheetAction(
+          isDefaultAction: true,
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
         ),
       ),
     );
@@ -185,7 +194,8 @@ class _NewReportScreenState extends State<NewReportScreen> {
 
   // ------------------------------------------------------------ review & send
 
-  bool get _ready => _type != null && _summary.text.trim().length >= 5;
+  bool get _ready =>
+      _place != null && _type != null && _summary.text.trim().length >= 5;
 
   String get _description {
     final summary = _summary.text.trim();
@@ -193,8 +203,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
     return details.isEmpty ? summary : '$summary\n$details';
   }
 
-  String get _placeName =>
-      _place.text.trim().isEmpty ? 'Pinned location' : _place.text.trim();
+  String get _placeName => _place!.fullName;
 
   Future<void> _review() async {
     FocusScope.of(context).unfocus();
@@ -205,7 +214,7 @@ class _NewReportScreenState extends State<NewReportScreen> {
       isScrollControlled: true,
       builder: (_) => _ReviewSheet(
         type: type,
-        position: _pin,
+        position: _place!.position,
         placeName: _placeName,
         description: _description,
         photoPath: _photoPath,
@@ -219,7 +228,9 @@ class _NewReportScreenState extends State<NewReportScreen> {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.paddingOf(context).bottom;
-    final label = _type == null
+    final label = _place == null
+        ? 'Choose where it is'
+        : _type == null
         ? "Choose what's in the way"
         : (_summary.text.trim().length < 5 ? 'Add a summary' : 'Review report');
 
@@ -240,64 +251,148 @@ class _NewReportScreenState extends State<NewReportScreen> {
           padding: EdgeInsets.fromLTRB(16, 4, 16, bottom + 24),
           children: [
             const SectionTitle('Where is it?'),
-            AppGroup(
-              children: [
-                SizedBox(height: 210, child: _pinMap()),
-                _CoordinatesRow(pin: _pin, fix: _fix, onLocate: _locate),
-                Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 4,
+            if (_place != null)
+              AppGroup(
+                children: [
+                  _SelectedPlace(
+                    place: _place!,
+                    onChange: () => setState(() => _place = null),
                   ),
-                  child: TextField(
-                    controller: _place,
-                    onChanged: _onPlaceChanged,
-                    style: kBodyStyle,
-                    textCapitalization: TextCapitalization.words,
-                    decoration: const InputDecoration(
-                      filled: false,
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: InputBorder.none,
-                      labelText: 'Place name',
-                      hintText: 'Search a place, e.g. KL Sentral',
-                    ),
-                  ),
+                ],
+              )
+            else ...[
+              SizedBox(
+                height: 44,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: SimeDarbyDemoData.hubs.length,
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final hub = SimeDarbyDemoData.hubs[index];
+                    return _HubChoice(
+                      label: hub.name,
+                      selected: hub.id == _hub.id,
+                      onTap: () => setState(() => _hub = hub),
+                    );
+                  },
                 ),
-                for (final suggestion in _suggestions)
-                  InkWell(
-                    onTap: () => _selectSuggestion(suggestion),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.place_outlined,
-                            size: 18,
-                            color: AppColors.textTertiary,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              suggestion.label,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: AppColors.textPrimary,
+              ),
+              const SizedBox(height: 12),
+              AppGroup(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: TextField(
+                      controller: _search,
+                      onChanged: _onQueryChanged,
+                      style: kBodyStyle,
+                      textInputAction: TextInputAction.search,
+                      decoration: InputDecoration(
+                        filled: false,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        hintText: 'Search for another place',
+                        prefixIcon: const Icon(
+                          CupertinoIcons.search,
+                          color: AppColors.textTertiary,
+                        ),
+                        suffixIcon: _query.isEmpty
+                            ? null
+                            : IconButton(
+                                tooltip: 'Clear search',
+                                icon: const Icon(
+                                  CupertinoIcons.xmark,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  _search.clear();
+                                  _onQueryChanged('');
+                                },
                               ),
-                            ),
-                          ),
-                        ],
                       ),
                     ),
                   ),
-              ],
-            ),
-            SectionFooter(_fixText),
+                ],
+              ),
+              _ListHeading(
+                _query.isEmpty ? 'Suggested at ${_hub.name}' : 'Results',
+              ),
+              AppGroup(
+                dividerIndent: 64,
+                children: [
+                  if (_query.isEmpty) ...[
+                    for (final node in _hub.nodes)
+                      _PlaceRow(
+                        leading: Icon(
+                          node.iconData,
+                          size: 19,
+                          color: AppColors.primary,
+                        ),
+                        title: node.label,
+                        onTap: () => _choose(_siteSpot(_hub, node)),
+                      ),
+                  ] else ...[
+                    for (final place in _localMatches)
+                      _PlaceRow(
+                        leading: Icon(
+                          place.icon,
+                          size: 19,
+                          color: AppColors.primary,
+                        ),
+                        title: place.label,
+                        subtitle: place.site,
+                        onTap: () => _choose(place),
+                      ),
+                    if (_searching)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                            SizedBox(width: 12),
+                            Text('Searching places…', style: kFootnoteStyle),
+                          ],
+                        ),
+                      ),
+                    for (final suggestion in _remote)
+                      _PlaceRow(
+                        leading: const Icon(
+                          CupertinoIcons.location,
+                          size: 20,
+                          color: AppColors.textSecondary,
+                        ),
+                        title: suggestion.label.split(',').first.trim(),
+                        subtitle: suggestion.label,
+                        onTap: () => _choose(
+                          _Place(
+                            label: suggestion.label.split(',').first.trim(),
+                            position: suggestion.position,
+                          ),
+                        ),
+                      ),
+                    if (!_searching &&
+                        _remote.isEmpty &&
+                        _localMatches.isEmpty &&
+                        _query.length >= 3)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: Text(
+                          'No places found. Try a different name.',
+                          style: kFootnoteStyle,
+                        ),
+                      ),
+                  ],
+                ],
+              ),
+              const SectionFooter(
+                'Choosing a point on a Sime Darby walkway lets routes there avoid the obstacle.',
+              ),
+            ],
             const SectionTitle("What's in the way?"),
             _TypeGrid(
               selected: _type,
@@ -373,60 +468,6 @@ class _NewReportScreenState extends State<NewReportScreen> {
       ),
     );
   }
-
-  /// Map with a fixed pin in the centre. Moving the map moves the report.
-  Widget _pinMap() {
-    return Stack(
-      children: [
-        FlutterMap(
-          mapController: _map,
-          options: MapOptions(
-            initialCenter: _pin,
-            initialZoom: 17,
-            backgroundColor: AppColors.field,
-            onMapReady: () {
-              _mapReady = true;
-              if (_fix == _Fix.gps ||
-                  _fix == _Fix.searched ||
-                  _fix == _Fix.preset) {
-                _map.move(_pin, 17);
-              }
-            },
-            onPositionChanged: (camera, hasGesture) {
-              if (!hasGesture) return;
-              setState(() {
-                _pin = camera.center;
-                _fix = _Fix.moved;
-              });
-            },
-          ),
-          children: [
-            TileLayer(
-              urlTemplate: AppConfig.osmTileUrl,
-              userAgentPackageName: 'com.example.mapoku',
-            ),
-          ],
-        ),
-        // The pin tip sits exactly on the map centre.
-        const IgnorePointer(
-          child: Center(
-            child: Padding(
-              padding: EdgeInsets.only(bottom: 40),
-              child: Icon(Icons.location_on, size: 40, color: AppColors.accent),
-            ),
-          ),
-        ),
-        const Positioned(
-          right: 6,
-          bottom: 4,
-          child: Text(
-            AppConfig.osmAttribution,
-            style: TextStyle(fontSize: 10, color: AppColors.textSecondary),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 class _EarnNote extends StatelessWidget {
@@ -459,92 +500,173 @@ class _EarnNote extends StatelessWidget {
   }
 }
 
-class _CoordinatesRow extends StatelessWidget {
-  const _CoordinatesRow({
-    required this.pin,
-    required this.fix,
-    required this.onLocate,
+class _HubChoice extends StatelessWidget {
+  const _HubChoice({
+    required this.label,
+    required this.selected,
+    required this.onTap,
   });
 
-  final LatLng pin;
-  final _Fix fix;
-  final VoidCallback onLocate;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final lat = pin.latitude.toStringAsFixed(6);
-    final lng = pin.longitude.toStringAsFixed(6);
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 10, 8, 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Semantics(
-              label: 'Latitude $lat, longitude $lng',
-              excludeSemantics: true,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: _Coord(label: 'Latitude', value: lat),
-                  ),
-                  Expanded(
-                    child: _Coord(label: 'Longitude', value: lng),
-                  ),
-                ],
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: Material(
+        color: selected ? AppColors.primary : AppColors.card,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(999),
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 44),
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: selected ? AppColors.primary : AppColors.border,
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : AppColors.textPrimary,
               ),
             ),
           ),
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: fix == _Fix.locating
-                ? const Center(
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : IconButton(
-                    tooltip: 'Use my current location',
-                    onPressed: onLocate,
-                    icon: Icon(
-                      fix == _Fix.unavailable
-                          ? Icons.location_disabled
-                          : Icons.my_location,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                  ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _Coord extends StatelessWidget {
-  const _Coord({required this.label, required this.value});
+/// Small label above a list, outside the rounded card (iOS grouped style).
+class _ListHeading extends StatelessWidget {
+  const _ListHeading(this.text);
 
-  final String label;
-  final String value;
+  final String text;
 
   @override
-  Widget build(BuildContext context) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(label, style: kFootnoteStyle),
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 14.5,
-          color: AppColors.textPrimary,
-          fontFeatures: [FontFeature.tabularFigures()],
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+    child: Text(
+      text,
+      style: const TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: AppColors.textSecondary,
+      ),
+    ),
+  );
+}
+
+class _PlaceRow extends StatelessWidget {
+  const _PlaceRow({
+    required this.leading,
+    required this.title,
+    required this.onTap,
+    this.subtitle,
+  });
+
+  final Widget leading;
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: subtitle == null ? title : '$title, $subtitle',
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.field,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: leading,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: kBodyStyle),
+                    if (subtitle != null)
+                      Text(
+                        subtitle!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: kFootnoteStyle,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
-    ],
-  );
+    );
+  }
+}
+
+/// The place that was picked, with a way to change it.
+class _SelectedPlace extends StatelessWidget {
+  const _SelectedPlace({required this.place, required this.onChange});
+
+  final _Place place;
+  final VoidCallback onChange;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: AppColors.mint,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(place.icon, size: 20, color: AppColors.primary),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(place.label, style: kBodyStyle),
+                if (place.site != null)
+                  Text(place.site!, style: kFootnoteStyle),
+              ],
+            ),
+          ),
+          TextButton(onPressed: onChange, child: const Text('Change')),
+        ],
+      ),
+    );
+  }
 }
 
 /// Two-column grid of all obstacle categories.
@@ -628,7 +750,11 @@ class _TypeTile extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Text(type.icon, style: const TextStyle(fontSize: 20)),
+                Icon(
+                  type.icon,
+                  size: 22,
+                  color: selected ? Colors.white : AppColors.accent,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
@@ -673,14 +799,14 @@ class _PhotoRow extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.photo_camera_outlined,
+                    CupertinoIcons.camera,
                     size: 22,
                     color: AppColors.primary,
                   ),
                   SizedBox(width: 12),
                   Expanded(child: Text('Add a photo', style: kBodyStyle)),
                   Icon(
-                    Icons.chevron_right,
+                    CupertinoIcons.chevron_right,
                     size: 20,
                     color: AppColors.textTertiary,
                   ),
@@ -716,7 +842,7 @@ class _PhotoRow extends StatelessWidget {
                 tooltip: 'Remove photo',
                 onPressed: onRemove,
                 icon: const Icon(
-                  Icons.delete_outline,
+                  CupertinoIcons.trash,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -769,7 +895,6 @@ class _ReviewSheetState extends State<_ReviewSheet> {
     final preview = Report(
       id: 'preview',
       type: widget.type.label,
-      icon: widget.type.icon,
       location: widget.placeName,
       description: widget.description,
       imagePath: widget.photoPath,
@@ -813,18 +938,14 @@ class _ReviewSheetState extends State<_ReviewSheet> {
             bordered: false,
             children: [
               _Line('Category', widget.type.label),
-              _Line(
-                'Coordinates',
-                '${widget.position.latitude.toStringAsFixed(6)}, '
-                    '${widget.position.longitude.toStringAsFixed(6)}',
-              ),
+              _Line('Location', widget.placeName),
               _Line('Photo', widget.photoPath == null ? 'None' : 'Added'),
             ],
           ),
           const SizedBox(height: 20),
           FilledButton.icon(
             onPressed: _sending ? null : _send,
-            icon: const Icon(Icons.send, size: 18),
+            icon: const Icon(CupertinoIcons.paperplane_fill, size: 18),
             label: Text(_sending ? 'Sending…' : 'Send report'),
           ),
           const SizedBox(height: 4),

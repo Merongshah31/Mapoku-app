@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -128,7 +129,7 @@ class _RouteEndpoints extends StatelessWidget {
                 onPressed: onVoiceTap,
                 constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
                 icon: const Icon(
-                  Icons.mic_none,
+                  CupertinoIcons.mic,
                   size: 20,
                   color: AppColors.primary,
                 ),

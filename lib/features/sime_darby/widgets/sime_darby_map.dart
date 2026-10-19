@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart' as geo;
 import 'package:maplibre_gl/maplibre_gl.dart';
@@ -600,13 +601,18 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       if (position == null) continue;
       widgets.add(
         Positioned(
-          left: position.dx - 18,
-          top: position.dy - 18,
+          left: position.dx - 22,
+          top: position.dy - 22,
           child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
             onTap: widget.onHazardTap == null
                 ? null
                 : () => widget.onHazardTap!(hazard),
-            child: _HazardMarker(hazard: hazard),
+            child: SizedBox(
+              width: 44,
+              height: 44,
+              child: Center(child: _HazardMarker(hazard: hazard)),
+            ),
           ),
         ),
       );
@@ -655,7 +661,7 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
               ? null
               : () => widget.onNodeTap!(node),
           child: _NodeBadge(
-            icon: node.icon,
+            icon: node.iconData,
             label: node.label,
             covered: node.covered,
           ),
@@ -774,7 +780,7 @@ class _NodeBadge extends StatelessWidget {
     required this.covered,
   });
 
-  final String icon;
+  final IconData icon;
   final String label;
   final bool covered;
 
@@ -800,7 +806,7 @@ class _NodeBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: <Widget>[
-          Text(icon, style: const TextStyle(fontSize: 11)),
+          Icon(icon, size: 12, color: Colors.white),
           const SizedBox(width: 5),
           Flexible(
             child: Text(
@@ -809,7 +815,7 @@ class _NodeBadge extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 10.5,
+                fontSize: 11,
                 fontWeight: FontWeight.w800,
               ),
             ),
@@ -884,10 +890,7 @@ class _HazardMarker extends StatelessWidget {
             ),
           ],
         ),
-        child: Text(
-          hazard.obstacle.type.icon,
-          style: const TextStyle(fontSize: 17),
-        ),
+        child: Icon(hazard.obstacle.type.icon, size: 18, color: Colors.white),
       ),
     );
   }
@@ -909,8 +912,8 @@ class _LocateButton extends StatelessWidget {
         customBorder: const CircleBorder(),
         onTap: () => onTap(),
         child: const Padding(
-          padding: EdgeInsets.all(10),
-          child: Icon(Icons.my_location, color: AppColors.primary, size: 20),
+          padding: EdgeInsets.all(12),
+          child: Icon(CupertinoIcons.location_fill, color: AppColors.primary, size: 20),
         ),
       ),
     );

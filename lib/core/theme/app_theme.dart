@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../constants/app_colors.dart';
@@ -48,7 +49,27 @@ class AppTheme {
       useMaterial3: true,
       colorScheme: colorScheme,
       scaffoldBackgroundColor: AppColors.background,
-      splashFactory: InkSparkle.splashFactory,
+      // iOS feel: no ripples, native slide transitions and a back chevron.
+      splashFactory: NoSplash.splashFactory,
+      // Apple's minimum hit target is 44 x 44 pt on every platform.
+      materialTapTargetSize: MaterialTapTargetSize.padded,
+      highlightColor: Colors.black.withValues(alpha: 0.04),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.windows: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.fuchsia: CupertinoPageTransitionsBuilder(),
+        },
+      ),
+      actionIconTheme: ActionIconThemeData(
+        backButtonIconBuilder: (context) =>
+            const Icon(CupertinoIcons.back, size: 26),
+        closeButtonIconBuilder: (context) =>
+            const Icon(CupertinoIcons.xmark, size: 20),
+      ),
     );
 
     return base.copyWith(
@@ -58,7 +79,7 @@ class AppTheme {
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0.5,
-        centerTitle: false,
+        centerTitle: true,
         foregroundColor: AppColors.textPrimary,
       ),
       cardTheme: CardThemeData(
@@ -96,6 +117,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
+          minimumSize: const Size(44, 44),
           foregroundColor: AppColors.primary,
           textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         ),

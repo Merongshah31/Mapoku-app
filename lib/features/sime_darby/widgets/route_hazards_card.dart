@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -35,7 +36,7 @@ class RouteHazardsCard extends StatelessWidget {
             child: Row(
               children: <Widget>[
                 Icon(
-                  Icons.report_gmailerrorred,
+                  CupertinoIcons.exclamationmark_bubble,
                   size: 18,
                   color: AppColors.accent,
                 ),
@@ -56,7 +57,7 @@ class RouteHazardsCard extends StatelessWidget {
               padding: EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: Row(
                 children: <Widget>[
-                  Icon(Icons.check_circle, size: 18, color: AppColors.success),
+                  Icon(CupertinoIcons.checkmark_circle_fill, size: 18, color: AppColors.success),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -84,7 +85,7 @@ class RouteHazardsCard extends StatelessWidget {
               child: Row(
                 children: <Widget>[
                   Icon(
-                    Icons.add_circle_outline,
+                    CupertinoIcons.add_circled,
                     size: 20,
                     color: AppColors.primary,
                   ),
@@ -100,7 +101,7 @@ class RouteHazardsCard extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    Icons.chevron_right,
+                    CupertinoIcons.chevron_right,
                     size: 20,
                     color: AppColors.textTertiary,
                   ),
@@ -125,7 +126,7 @@ class _HazardRow extends StatelessWidget {
     final obstacle = hazard.obstacle;
     final (label, color) = switch (hazard.impact) {
       HazardImpact.onRoute => ('On your route', AppColors.danger),
-      HazardImpact.avoided => ('Avoided', AppColors.accent),
+      HazardImpact.avoided => ('Avoided', AppColors.accentText),
       HazardImpact.nearby => ('Not on your route', AppColors.textSecondary),
     };
     final summary = obstacle.description.split('\n').first.trim();
@@ -144,10 +145,7 @@ class _HazardRow extends StatelessWidget {
                 color: AppColors.accentSoft,
                 shape: BoxShape.circle,
               ),
-              child: Text(
-                obstacle.type.icon,
-                style: const TextStyle(fontSize: 18),
-              ),
+              child: Icon(obstacle.type.icon, size: 19, color: AppColors.accent),
             ),
             const SizedBox(width: 12),
             Expanded(

@@ -5,7 +5,9 @@ import 'package:mapoku/widgets/mapoku_logo.dart';
 void main() {
   testWidgets('renders the mapOKU wordmark', (tester) async {
     await tester.pumpWidget(
-      const MaterialApp(home: Scaffold(body: Center(child: MapokuLogo()))),
+      const MaterialApp(
+        home: Scaffold(body: Center(child: MapokuLogo())),
+      ),
     );
 
     expect(find.text('mapOKU'), findsOneWidget);

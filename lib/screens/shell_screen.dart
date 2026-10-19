@@ -1,7 +1,10 @@
+import 'dart:ui' show ImageFilter;
+
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/constants/app_colors.dart';
-import '../core/theme/app_theme.dart';
 import '../state/app_scope.dart';
 import '../widgets/mapoku_logo.dart';
 import '../widgets/points_pill.dart';
@@ -24,13 +27,21 @@ class _ShellScreenState extends State<ShellScreen> {
   int _index = 0;
 
   static const List<_NavTab> _tabs = [
-    (label: 'Map', icon: Icons.map_outlined, activeIcon: Icons.map),
+    (
+      label: 'Map',
+      icon: CupertinoIcons.map,
+      activeIcon: CupertinoIcons.map_fill,
+    ),
     (
       label: 'Reports',
-      icon: Icons.report_gmailerrorred_outlined,
-      activeIcon: Icons.report_gmailerrorred,
+      icon: CupertinoIcons.exclamationmark_bubble,
+      activeIcon: CupertinoIcons.exclamationmark_bubble_fill,
     ),
-    (label: 'Rewards', icon: Icons.redeem_outlined, activeIcon: Icons.redeem),
+    (
+      label: 'Rewards',
+      icon: CupertinoIcons.gift,
+      activeIcon: CupertinoIcons.gift_fill,
+    ),
   ];
 
   @override
@@ -89,15 +100,15 @@ class _ShellHeader extends StatelessWidget {
               GestureDetector(
                 onTap: onAvatarTap,
                 child: Container(
-                  height: 42,
-                  width: 42,
+                  height: 44,
+                  width: 44,
                   decoration: BoxDecoration(
                     color: AppColors.card,
                     shape: BoxShape.circle,
                     border: Border.all(color: AppColors.mintBorder),
                   ),
                   child: const Icon(
-                    Icons.person_outline,
+                    CupertinoIcons.person,
                     color: AppColors.primary,
                   ),
                 ),
@@ -110,6 +121,7 @@ class _ShellHeader extends StatelessWidget {
   }
 }
 
+/// Frosted tab bar with a hairline, like a native iOS tab bar.
 class _AppBottomNav extends StatelessWidget {
   const _AppBottomNav({
     required this.index,
@@ -123,28 +135,38 @@ class _AppBottomNav extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(top: BorderSide(color: AppColors.border)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              for (var i = 0; i < tabs.length; i++)
-                Expanded(
-                  child: _NavButton(
-                    label: tabs[i].label,
-                    icon: tabs[i].icon,
-                    activeIcon: tabs[i].activeIcon,
-                    selected: i == index,
-                    onTap: () => onChanged(i),
-                  ),
-                ),
-            ],
+    return ClipRect(
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface.withValues(alpha: 0.88),
+            border: const Border(
+              top: BorderSide(color: AppColors.border, width: 0.5),
+            ),
+          ),
+          child: SafeArea(
+            top: false,
+            child: SizedBox(
+              height: 52,
+              child: Row(
+                children: [
+                  for (var i = 0; i < tabs.length; i++)
+                    Expanded(
+                      child: _NavButton(
+                        label: tabs[i].label,
+                        icon: tabs[i].icon,
+                        activeIcon: tabs[i].activeIcon,
+                        selected: i == index,
+                        onTap: () {
+                          if (i != index) HapticFeedback.selectionClick();
+                          onChanged(i);
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
@@ -171,26 +193,24 @@ class _NavButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = selected ? AppColors.primary : AppColors.textTertiary;
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.mint : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppTheme.radiusMd),
-        ),
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: label,
+      excludeSemantics: true,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
         child: Column(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(selected ? activeIcon : icon, color: color, size: 24),
+            Icon(selected ? activeIcon : icon, color: color, size: 25),
             const SizedBox(height: 2),
             Text(
               label,
               style: TextStyle(
                 fontSize: 11,
-                fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                fontWeight: FontWeight.w600,
                 color: color,
               ),
             ),

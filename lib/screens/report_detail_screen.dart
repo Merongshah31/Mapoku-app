@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:intl/intl.dart';
@@ -82,7 +83,7 @@ class ReportDetailScreen extends StatelessWidget {
             const Row(
               children: [
                 Icon(
-                  Icons.photo_outlined,
+                  CupertinoIcons.photo,
                   size: 16,
                   color: AppColors.textTertiary,
                 ),
@@ -102,7 +103,7 @@ class ReportDetailScreen extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.flag, size: 16, color: AppColors.danger),
+                  const Icon(CupertinoIcons.flag_fill, size: 16, color: AppColors.danger),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -153,21 +154,14 @@ class ReportDetailScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-              _InfoRow(icon: Icons.place, title: r.place),
-              if (position != null)
-                _InfoRow(
-                  icon: Icons.map_outlined,
-                  title:
-                      '${position.latitude.toStringAsFixed(6)}, ${position.longitude.toStringAsFixed(6)}',
-                  subtitle: 'Latitude, longitude',
-                ),
+              _InfoRow(icon: CupertinoIcons.location_solid, title: r.place),
             ],
           ),
           const SectionTitle('When'),
           AppGroup(
             children: [
               _InfoRow(
-                icon: Icons.schedule,
+                icon: CupertinoIcons.clock,
                 title: DateFormat('EEE d MMM, h:mm a').format(r.createdAt),
                 subtitle: 'Seen ${reportTimeAgo(r.createdAt)}',
               ),
@@ -175,7 +169,7 @@ class ReportDetailScreen extends StatelessWidget {
           ),
           const SectionTitle('Category'),
           AppGroup(
-            children: [_InfoRow(emoji: r.icon, title: r.type)],
+            children: [_InfoRow(icon: r.icon, title: r.type)],
           ),
           if (!mine) ...[
             const SectionTitle('Is it still there?'),
@@ -206,7 +200,7 @@ class ReportDetailScreen extends StatelessWidget {
             AppGroup(
               children: [
                 _InfoRow(
-                  icon: Icons.thumb_up_alt_outlined,
+                  icon: CupertinoIcons.hand_thumbsup,
                   title:
                       '${r.confirmations} ${r.confirmations == 1 ? 'person says' : 'people say'} it is still there',
                   subtitle: r.status == ReportStatus.verified
@@ -234,7 +228,6 @@ class ReportDetailScreen extends StatelessWidget {
         return Report(
           id: obstacle.id,
           type: report.type,
-          icon: report.icon,
           location: report.location,
           description: report.description,
           position: report.position,
@@ -324,7 +317,7 @@ class _PhotoViewer extends StatelessWidget {
                 onPressed: () => Navigator.pop(context),
                 iconSize: 32,
                 color: Colors.white70,
-                icon: const Icon(Icons.cancel),
+                icon: const Icon(CupertinoIcons.xmark_circle_fill),
               ),
             ),
           ),
@@ -335,10 +328,9 @@ class _PhotoViewer extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow({this.icon, this.emoji, required this.title, this.subtitle});
+  const _InfoRow({required this.icon, required this.title, this.subtitle});
 
-  final IconData? icon;
-  final String? emoji;
+  final IconData icon;
   final String title;
   final String? subtitle;
 
@@ -349,9 +341,7 @@ class _InfoRow extends StatelessWidget {
       children: [
         SizedBox(
           width: 24,
-          child: emoji != null
-              ? Text(emoji!, style: const TextStyle(fontSize: 18))
-              : Icon(icon, size: 20, color: AppColors.primary),
+          child: Icon(icon, size: 20, color: AppColors.primary),
         ),
         const SizedBox(width: 12),
         Expanded(

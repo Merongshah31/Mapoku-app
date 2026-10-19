@@ -4,6 +4,7 @@ import 'package:mapoku/features/sime_darby/data/sime_darby_demo_data.dart';
 import 'package:mapoku/features/sime_darby/models/sime_darby_hub.dart';
 import 'package:mapoku/features/sime_darby/services/accessible_pathfinder.dart';
 import 'package:mapoku/features/sime_darby/services/route_hazards.dart';
+import 'package:mapoku/data/demo_data.dart';
 import 'package:mapoku/models/obstacle.dart';
 
 void main() {
@@ -134,5 +135,33 @@ void main() {
       final stuck = RouteHazards.assess(hazards, usual: usual, active: usual);
       expect(stuck.single.impact, HazardImpact.onRoute);
     });
+  });
+
+  test('demo reports leave a way through at every site, in both modes', () {
+    for (final hub in SimeDarbyDemoData.hubs) {
+      for (final accessible in [true, false]) {
+        final hazards = RouteHazards.forHub(
+          hub,
+          DemoData.communityObstacles,
+          accessible: accessible,
+        );
+        final route = pathfinder.findPath(
+          hub: hub,
+          accessibleOnly: accessible,
+          blockedEdges: {for (final h in hazards) h.edge},
+        );
+        expect(route, isNotNull, reason: '${hub.name} accessible=$accessible');
+      }
+    }
+  });
+
+  test('every demo report is pinned at one of the three sites', () {
+    for (final report in DemoData.communityObstacles) {
+      expect(
+        SimeDarbyDemoData.hubs.any((hub) => report.location.endsWith(hub.name)),
+        isTrue,
+        reason: report.location,
+      );
+    }
   });
 }

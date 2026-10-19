@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -119,7 +120,7 @@ class _RedeemRewardSheetState extends State<RedeemRewardSheet> {
                 color: AppColors.mint,
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Text(reward.emoji, style: const TextStyle(fontSize: 24)),
+              child: Icon(reward.icon, size: 24, color: AppColors.primary),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -188,7 +189,7 @@ class _RedeemRewardSheetState extends State<RedeemRewardSheet> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const Icon(Icons.check_circle, size: 56, color: AppColors.primary),
+        const Icon(CupertinoIcons.checkmark_circle_fill, size: 56, color: AppColors.primary),
         const SizedBox(height: 12),
         Text(
           'Redeemed',
@@ -268,7 +269,7 @@ class _VoucherCodeBoxState extends State<VoucherCodeBox> {
           TextButton.icon(
             onPressed: _copy,
             style: TextButton.styleFrom(minimumSize: const Size(44, 44)),
-            icon: Icon(_copied ? Icons.check : Icons.copy_rounded, size: 18),
+            icon: Icon(_copied ? CupertinoIcons.checkmark_alt : CupertinoIcons.doc_on_doc, size: 18),
             label: Text(_copied ? 'Copied' : 'Copy'),
           ),
         ],

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -29,9 +30,9 @@ Future<void> callContact(BuildContext context, EmergencyContact contact) async {
     ok = false;
   }
   if (!ok && context.mounted) {
-    showDialog<void>(
+    showAdaptiveDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog.adaptive(
         title: const Text("Can't call from this device"),
         content: Text(
           'Call ${contact.name} on ${contact.phone} from another phone.',
@@ -66,7 +67,7 @@ class ContactsGroup extends StatelessWidget {
               child: Row(
                 children: [
                   Icon(
-                    Icons.person_add_alt_1,
+                    CupertinoIcons.person_add,
                     size: 24,
                     color: AppColors.primary,
                   ),
@@ -78,7 +79,7 @@ class ContactsGroup extends StatelessWidget {
                     ),
                   ),
                   Icon(
-                    Icons.chevron_right,
+                    CupertinoIcons.chevron_right,
                     size: 20,
                     color: AppColors.textTertiary,
                   ),
@@ -122,9 +123,9 @@ class ContactsGroup extends StatelessWidget {
     BuildContext context,
     EmergencyContact contact,
   ) async {
-    final ok = await showDialog<bool>(
+    final ok = await showAdaptiveDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog.adaptive(
         title: Text('Remove ${contact.name}?'),
         content: const Text(
           'They will no longer show as an emergency contact.',
@@ -233,7 +234,7 @@ class _ContactRow extends StatelessWidget {
                 backgroundColor: AppColors.primary,
                 minimumSize: const Size(44, 44),
               ),
-              icon: const Icon(Icons.phone, size: 19, color: Colors.white),
+              icon: const Icon(CupertinoIcons.phone_fill, size: 19, color: Colors.white),
             ),
           ),
         ],

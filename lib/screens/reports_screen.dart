@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../core/constants/app_colors.dart';
@@ -50,7 +51,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.check_circle, size: 56, color: AppColors.primary),
+            const Icon(CupertinoIcons.checkmark_circle_fill, size: 56, color: AppColors.primary),
             const SizedBox(height: 12),
             Text('Report sent', style: Theme.of(ctx).textTheme.titleLarge),
             const SizedBox(height: 8),
@@ -75,7 +76,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Report _toReport(Obstacle obstacle) => Report(
     id: obstacle.id,
     type: obstacle.type.label,
-    icon: obstacle.type.icon,
     location: obstacle.location,
     description: obstacle.description,
     position: obstacle.position,
@@ -125,7 +125,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: _newReport,
-            icon: const Icon(Icons.add, size: 20),
+            icon: const Icon(CupertinoIcons.add, size: 20),
             label: const Text('Report an obstacle'),
           ),
           const SizedBox(height: 20),
@@ -184,7 +184,7 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         children: [
           const Icon(
-            Icons.map_outlined,
+            CupertinoIcons.map,
             size: 40,
             color: AppColors.textTertiary,
           ),

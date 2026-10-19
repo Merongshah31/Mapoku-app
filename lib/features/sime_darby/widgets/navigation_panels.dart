@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -47,7 +48,7 @@ class NavigationBanner extends StatelessWidget {
     if (_arrived) {
       title = 'You have arrived';
       detail = arrivedLabel;
-      icon = Icons.flag;
+      icon = CupertinoIcons.flag_fill;
     } else {
       final next = route.nodes[step + 1];
       title = stepInstruction(next);
@@ -126,7 +127,7 @@ class NavigationBanner extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: <Widget>[
                       const Icon(
-                        Icons.warning_amber_rounded,
+                        CupertinoIcons.exclamationmark_triangle_fill,
                         size: 16,
                         color: Colors.white,
                       ),
@@ -245,7 +246,7 @@ class NavigationPanel extends StatelessWidget {
                     minimumSize: const Size(48, 48),
                   ),
                   icon: const Icon(
-                    Icons.report_gmailerrorred,
+                    CupertinoIcons.exclamationmark_bubble,
                     color: AppColors.accent,
                   ),
                 ),
@@ -272,7 +273,7 @@ class NavigationPanel extends StatelessWidget {
                       style: FilledButton.styleFrom(
                         minimumSize: const Size.fromHeight(50),
                       ),
-                      icon: const Icon(Icons.arrow_forward, size: 20),
+                      icon: const Icon(CupertinoIcons.arrow_right, size: 20),
                       label: const Text('Next step'),
                     ),
                   ),

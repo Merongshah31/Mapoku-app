@@ -126,7 +126,7 @@ class SegmentTabs<T> extends StatelessWidget {
                   onTap: () => onChanged(entry.key),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 180),
-                    constraints: const BoxConstraints(minHeight: 40),
+                    constraints: const BoxConstraints(minHeight: 44),
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
                       color: entry.key == value

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 
 import '../core/constants/app_colors.dart';
@@ -112,13 +113,13 @@ class ProfileScreen extends StatelessWidget {
             children: [
               if (state.isLoggedIn)
                 _ActionRow(
-                  icon: Icons.logout,
+                  icon: CupertinoIcons.square_arrow_right,
                   label: 'Log out',
                   onTap: state.signOut,
                 )
               else
                 _ActionRow(
-                  icon: Icons.login,
+                  icon: CupertinoIcons.person_crop_circle,
                   label: 'Sign in to sync your points',
                   onTap: () => showModalBottomSheet<void>(
                     context: context,
@@ -160,9 +161,9 @@ class _Identity extends StatelessWidget {
 
   Future<void> _editName(BuildContext context) async {
     final controller = TextEditingController(text: name == 'Guest' ? '' : name);
-    final result = await showDialog<String>(
+    final result = await showAdaptiveDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => AlertDialog.adaptive(
         title: const Text('Your name'),
         content: TextField(
           controller: controller,
@@ -291,7 +292,7 @@ class _NeedRow extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(child: Text(need.label, style: kBodyStyle)),
             if (selected)
-              const Icon(Icons.check, size: 22, color: AppColors.primary),
+              const Icon(CupertinoIcons.checkmark_alt, size: 22, color: AppColors.primary),
           ],
         ),
       ),

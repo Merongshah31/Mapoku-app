@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -96,7 +97,7 @@ class ReportCard extends StatelessWidget {
                   color: AppColors.accentSoft,
                   shape: BoxShape.circle,
                 ),
-                child: Text(r.icon, style: const TextStyle(fontSize: 19)),
+                child: Icon(r.icon, size: 20, color: AppColors.accentText),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -135,7 +136,7 @@ class ReportCard extends StatelessWidget {
                 const Padding(
                   padding: EdgeInsets.only(left: 8, top: 2),
                   child: Icon(
-                    Icons.chevron_right,
+                    CupertinoIcons.chevron_right,
                     size: 20,
                     color: AppColors.textTertiary,
                   ),
@@ -180,7 +181,7 @@ class ReportCard extends StatelessWidget {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(Icons.flag, size: 16, color: AppColors.danger),
+                  const Icon(CupertinoIcons.flag_fill, size: 16, color: AppColors.danger),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -226,7 +227,7 @@ class ReportCard extends StatelessWidget {
                   child: _VoteButton(
                     label: 'Still there',
                     count: r.confirmations,
-                    icon: Icons.thumb_up_alt_outlined,
+                    icon: CupertinoIcons.hand_thumbsup,
                     onTap: () => onVote!(true),
                   ),
                 ),
@@ -235,7 +236,7 @@ class ReportCard extends StatelessWidget {
                   child: _VoteButton(
                     label: "It's gone",
                     count: r.clearances,
-                    icon: Icons.check,
+                    icon: CupertinoIcons.checkmark_alt,
                     onTap: () => onVote!(false),
                   ),
                 ),
