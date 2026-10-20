@@ -1,11 +1,11 @@
 {
-    "name": "mapoku",
-    "short_name": "mapoku",
+    "name": "mapOKU Accessibility Map",
+    "short_name": "mapOKU",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#F0EEE7",
+    "theme_color": "#346F4B",
+    "description": "Community-powered accessibility mapping for OKU and everyone who moves through the city.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
