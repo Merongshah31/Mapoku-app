@@ -38,6 +38,14 @@ class _RewardsScreenState extends State<RewardsScreen> {
           Text('Rewards', style: Theme.of(context).textTheme.headlineMedium),
           const SizedBox(height: 2),
           Text(
+            'Status: Earning',
+            style: kFootnoteStyle.copyWith(
+              color: AppColors.primary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
             'Turn your contributions into real perks.',
             style: Theme.of(context).textTheme.bodySmall,
           ),

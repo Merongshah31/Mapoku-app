@@ -434,6 +434,20 @@ class _RoutesScreenState extends State<RoutesScreen> {
                     ),
             ),
 
+            Positioned(
+              top: _gap + 112,
+              left: _gap,
+              right: _gap + 74,
+              child: IgnorePointer(
+                ignoring: navStep != null,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 180),
+                  opacity: navStep == null ? 1 : 0,
+                  child: _MapQuickFilters(need: _need),
+                ),
+              ),
+            ),
+
             // 3. Legend, clear of the minimised sheet; hidden while it is open.
             Positioned(
               left: _gap,
@@ -444,6 +458,19 @@ class _RoutesScreenState extends State<RoutesScreen> {
                 child: IgnorePointer(
                   ignoring: !_controlsVisible || _navigating,
                   child: PointerInterceptor(child: const _MapLegend()),
+                ),
+              ),
+            ),
+
+            Positioned(
+              right: _gap,
+              bottom: controlsBottom + 12,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 180),
+                opacity: _controlsVisible && !_navigating ? 1 : 0,
+                child: IgnorePointer(
+                  ignoring: !_controlsVisible || _navigating,
+                  child: _AmbientNoiseCard(result: active),
                 ),
               ),
             ),
@@ -650,6 +677,17 @@ class _SheetHeader extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         Text(
+                          'Destination · ${hub.pinBLabel}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
                           hub.name,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -693,6 +731,54 @@ class _SheetHeader extends StatelessWidget {
   }
 }
 
+class _MapQuickFilters extends StatelessWidget {
+  const _MapQuickFilters({required this.need});
+
+  final AccessibilityNeed need;
+
+  @override
+  Widget build(BuildContext context) {
+    final chips = <(IconData, String)>[
+      (Icons.my_location_rounded, 'Near me'),
+      (need.icon, need.label),
+      (
+        need.avoidsNoise ? Icons.volume_off_rounded : Icons.graphic_eq_rounded,
+        need.avoidsNoise ? 'Low-noise route' : 'Noise overlay',
+      ),
+    ];
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final chip in chips)
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: AppColors.surface.withValues(alpha: 0.94),
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(chip.$1, size: 15, color: AppColors.primary),
+                const SizedBox(width: 6),
+                Text(
+                  chip.$2,
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
 /// Floating route legend: frosted, so the map reads through it.
 class _MapLegend extends StatelessWidget {
   const _MapLegend();
@@ -717,6 +803,62 @@ class _MapLegend extends StatelessWidget {
               _LegendChip(color: Color(0xFF8F8F8F), label: 'Other route'),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AmbientNoiseCard extends StatelessWidget {
+  const _AmbientNoiseCard({required this.result});
+
+  final PathResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final noise = result.worstNoise;
+    final loud = noise.isLoud;
+    final tone = loud ? AppColors.danger : AppColors.success;
+    final icon = loud ? Icons.volume_up_rounded : Icons.volume_off_rounded;
+
+    return Semantics(
+      container: true,
+      label: 'Ambient noise ${noise.label}, ${noise.db} decibels',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.surface.withValues(alpha: 0.93),
+          borderRadius: BorderRadius.circular(AppTheme.radiusSm),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 16, color: tone),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Ambient noise',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                Text(
+                  '${noise.label} · ${noise.db} dB',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w800,
+                    color: tone,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
