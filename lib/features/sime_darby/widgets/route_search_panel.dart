@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/constants/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../services/accessible_pathfinder.dart';
 
 /// Accessibility need chosen in the trip planner.
 ///
@@ -12,6 +13,10 @@ enum AccessibilityNeed {
   wheelchair('Wheelchair', Icons.accessible),
   crutchesElderly('Crutches / elderly', Icons.elderly),
   visualTactile('Visual / tactile', Icons.visibility),
+  blindLowVision('Blind / white cane', Icons.visibility_off),
+  soundSensitive('Sound-sensitive', Icons.volume_off),
+  lightSensitive('Light-sensitive', Icons.wb_sunny_outlined),
+  buggy('Buggy / mobility', Icons.airport_shuttle),
   standard('Standard', Icons.directions_walk);
 
   const AccessibilityNeed(this.label, this.icon);
@@ -19,7 +24,55 @@ enum AccessibilityNeed {
   final String label;
   final IconData icon;
 
+  /// True for every mode that is not the plain pedestrian route.
   bool get isAccessible => this != AccessibilityNeed.standard;
+
+  /// Stairs are unusable in this mode.
+  bool get requiresStepFree => switch (this) {
+    AccessibilityNeed.wheelchair => true,
+    AccessibilityNeed.crutchesElderly => true,
+    AccessibilityNeed.visualTactile => true,
+    AccessibilityNeed.blindLowVision => true,
+    AccessibilityNeed.buggy => true,
+    AccessibilityNeed.soundSensitive => false,
+    AccessibilityNeed.lightSensitive => false,
+    AccessibilityNeed.standard => false,
+  };
+
+  /// Noise is the deciding constraint (autism / ADHD, sound sensitivity).
+  bool get avoidsNoise => this == AccessibilityNeed.soundSensitive;
+
+  /// Glare and direct sun are the deciding constraint.
+  bool get avoidsBright => this == AccessibilityNeed.lightSensitive;
+
+  /// Tactile paving is the deciding constraint (blind / low vision).
+  bool get needsTactile =>
+      this == AccessibilityNeed.blindLowVision ||
+      this == AccessibilityNeed.visualTactile;
+
+  /// The mapOKU buggy service mode.
+  bool get needsBuggy => this == AccessibilityNeed.buggy;
+
+  /// One-line explanation shown under the chips.
+  String get hint => switch (this) {
+    AccessibilityNeed.wheelchair => 'No stairs: lifts, ramps and covered links only.',
+    AccessibilityNeed.crutchesElderly => 'Step-free route with gentle slopes.',
+    AccessibilityNeed.visualTactile => 'Tactile paving and safe crossings first.',
+    AccessibilityNeed.blindLowVision => 'White-cane route: tactile paving, few loud crossings.',
+    AccessibilityNeed.soundSensitive => 'Routes around noisy zones for sensory calm.',
+    AccessibilityNeed.lightSensitive => 'Routes through shade and covered walkways.',
+    AccessibilityNeed.buggy => 'Wide, step-free buggy pickup route.',
+    AccessibilityNeed.standard => 'Shortest walking route.',
+  };
+
+  /// The routing constraints passed to the pathfinder.
+  RouteProfile get profile => RouteProfile(
+    stepFree: requiresStepFree,
+    avoidNoise: avoidsNoise,
+    avoidBright: avoidsBright,
+    needsTactile: needsTactile,
+    needsBuggy: needsBuggy,
+  );
 }
 
 /// Trip planner card: a connected From → To route plus the accessibility need.
@@ -62,6 +115,24 @@ class RouteSearchPanel extends StatelessWidget {
                 selected: option == need,
                 onTap: () => onNeedChanged(option),
               ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Icon(need.icon, size: 15, color: AppColors.primary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                need.hint,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ],
         ),
       ],

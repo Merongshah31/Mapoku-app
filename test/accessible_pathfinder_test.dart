@@ -4,6 +4,7 @@ import 'package:mapoku/features/sime_darby/data/sime_darby_demo_data.dart';
 import 'package:mapoku/features/sime_darby/models/sime_darby_hub.dart';
 import 'package:mapoku/features/sime_darby/services/accessible_pathfinder.dart';
 import 'package:mapoku/features/sime_darby/services/route_hazards.dart';
+import 'package:mapoku/features/sime_darby/widgets/route_search_panel.dart';
 import 'package:mapoku/data/demo_data.dart';
 import 'package:mapoku/models/obstacle.dart';
 
@@ -163,5 +164,150 @@ void main() {
         reason: report.location,
       );
     }
+  });
+
+  group('sensory routing profiles', () {
+    test('sound-sensitive routing avoids the noisy station service road', () {
+      final hub = SimeDarbyDemoData.sjcc;
+      final route = pathfinder.findPath(
+        hub: hub,
+        accessibleOnly: false,
+        profile: const RouteProfile(avoidNoise: true),
+      )!;
+
+      expect(route.sensorySafe, isTrue);
+      expect(route.worstNoise.isLoud, isFalse);
+      expect(route.nodes.map((node) => node.id), isNot(contains('sj-s1')));
+    });
+
+    test('light-sensitive routing stays out of direct sun and glare', () {
+      final hub = SimeDarbyDemoData.sjcc;
+      final route = pathfinder.findPath(
+        hub: hub,
+        accessibleOnly: false,
+        profile: const RouteProfile(avoidBright: true),
+      )!;
+
+      expect(route.worstLight.isHarsh, isFalse);
+    });
+
+    test('white-cane routing prefers tactile paving end to end', () {
+      final hub = SimeDarbyDemoData.sjcc;
+      final route = pathfinder.findPath(
+        hub: hub,
+        accessibleOnly: true,
+        profile: const RouteProfile(stepFree: true, needsTactile: true),
+      )!;
+
+      expect(route.stepFree, isTrue);
+      expect(route.tactilePercent, 100);
+    });
+
+    test('the buggy service reaches every hub on a step-free route', () {
+      for (final hub in SimeDarbyDemoData.hubs) {
+        final route = pathfinder.findPath(
+          hub: hub,
+          accessibleOnly: true,
+          profile: const RouteProfile(stepFree: true, needsBuggy: true),
+        );
+
+        expect(route, isNotNull, reason: hub.name);
+        expect(route!.stepFree, isTrue, reason: hub.name);
+        expect(route.buggyFriendly, isTrue, reason: hub.name);
+      }
+    });
+
+    test('every hub carries a loud IoT sensor for the red noise zones', () {
+      for (final hub in SimeDarbyDemoData.hubs) {
+        expect(hub.noiseSensors, isNotEmpty, reason: hub.name);
+        expect(
+          hub.noiseSensors.any((sensor) => sensor.level.isLoud),
+          isTrue,
+          reason: hub.name,
+        );
+        for (final sensor in hub.noiseSensors) {
+          expect(sensor.db, greaterThan(0), reason: hub.name);
+          expect(sensor.radiusMeters, greaterThan(0), reason: hub.name);
+        }
+      }
+    });
+  });
+
+  group('IoT sensory heatmap zones', () {
+    test('decibel readings fall into the three legend bands', () {
+      expect(NoiseZone.forDb(42), NoiseZone.calm);
+      expect(NoiseZone.forDb(54.9), NoiseZone.calm);
+      expect(NoiseZone.forDb(55), NoiseZone.moderate);
+      expect(NoiseZone.forDb(70), NoiseZone.moderate);
+      // The 70-75 dB window stays amber; overload only starts above 75 dB.
+      expect(NoiseZone.forDb(75), NoiseZone.moderate);
+      expect(NoiseZone.forDb(75.1), NoiseZone.danger);
+      expect(NoiseZone.forDb(92), NoiseZone.danger);
+    });
+
+    test('only the danger band asks for the pulsing red ring', () {
+      expect(NoiseZone.calm.isDanger, isFalse);
+      expect(NoiseZone.moderate.isDanger, isFalse);
+      expect(NoiseZone.danger.isDanger, isTrue);
+      expect(NoiseZone.danger.color.toARGB32(), 0xFFEF4444);
+      expect(NoiseZone.calm.color.toARGB32(), 0xFF38BDF8);
+      expect(NoiseZone.moderate.color.toARGB32(), 0xFFF59E0B);
+    });
+
+    test('the legend lists the requested bands in order', () {
+      expect(NoiseZone.values, hasLength(3));
+      expect(
+        NoiseZone.values.map((zone) => zone.range).toList(),
+        <String>['Under 55 dB', '55-75 dB', 'Over 75 dB'],
+      );
+    });
+
+    test('a sensor reports the zone of its own reading', () {
+      const sensor = NoiseSensor(
+        id: 'test-a1',
+        position: LatLng(3.0, 101.0),
+        db: 78,
+        label: 'Test crossing',
+      );
+
+      expect(sensor.zone, NoiseZone.danger);
+      expect(sensor.zone.range, 'Over 75 dB');
+    });
+
+    test('every hub shows all three heatmap zones for the demo', () {
+      for (final hub in SimeDarbyDemoData.hubs) {
+        final zones = hub.noiseSensors.map((sensor) => sensor.zone).toSet();
+
+        expect(zones, contains(NoiseZone.calm), reason: hub.name);
+        expect(zones, contains(NoiseZone.moderate), reason: hub.name);
+        expect(zones, contains(NoiseZone.danger), reason: hub.name);
+      }
+    });
+
+    test('the loud sensors that pulse are the danger-zone ones', () {
+      for (final hub in SimeDarbyDemoData.hubs) {
+        final loud = hub.noiseSensors.where((sensor) => sensor.zone.isDanger);
+
+        expect(loud, isNotEmpty, reason: hub.name);
+        for (final sensor in loud) {
+          expect(sensor.db, greaterThan(75), reason: hub.name);
+        }
+      }
+    });
+  });
+
+  group('accessibility needs map to routing profiles', () {
+    test('each need builds the matching constraints', () {
+      expect(AccessibilityNeed.wheelchair.profile.stepFree, isTrue);
+      expect(AccessibilityNeed.soundSensitive.profile.avoidNoise, isTrue);
+      expect(AccessibilityNeed.soundSensitive.profile.stepFree, isFalse);
+      expect(AccessibilityNeed.lightSensitive.profile.avoidBright, isTrue);
+      expect(AccessibilityNeed.blindLowVision.profile.needsTactile, isTrue);
+      expect(AccessibilityNeed.blindLowVision.profile.stepFree, isTrue);
+      expect(AccessibilityNeed.buggy.profile.needsBuggy, isTrue);
+      expect(AccessibilityNeed.buggy.profile.stepFree, isTrue);
+      expect(AccessibilityNeed.standard.isAccessible, isFalse);
+      expect(AccessibilityNeed.standard.profile.stepFree, isFalse);
+    });
   });
 }

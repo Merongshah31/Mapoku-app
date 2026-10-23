@@ -138,6 +138,8 @@ class RouteMetricsCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           _CoveredBar(percent: result.coveredPercent),
+          const SizedBox(height: 14),
+          _SensorySummary(result: result),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
@@ -321,6 +323,76 @@ class _CoveredBar extends StatelessWidget {
               ),
             ),
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Sensory read-out for the active route: noise, light, tactile paving and
+/// buggy access — the four extra things the extended mapOKU profiles care about.
+class _SensorySummary extends StatelessWidget {
+  const _SensorySummary({required this.result});
+
+  final PathResult result;
+
+  @override
+  Widget build(BuildContext context) {
+    final noise = result.worstNoise;
+    final light = result.worstLight;
+    final tactile = result.tactilePercent;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: const <Widget>[
+            Icon(Icons.graphic_eq, size: 14, color: AppColors.textSecondary),
+            SizedBox(width: 6),
+            Text(
+              'Sensory profile',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: <Widget>[
+            _StatusPill(
+              icon: noise.isLoud ? Icons.volume_up : Icons.volume_off,
+              label: '${noise.label} · ${noise.db} dB',
+              color: noise.isLoud ? AppColors.danger : AppColors.success,
+            ),
+            _StatusPill(
+              icon: light.isHarsh ? Icons.wb_sunny : Icons.umbrella,
+              label: light.label,
+              color: light.isHarsh
+                  ? AppColors.construction
+                  : AppColors.success,
+            ),
+            _StatusPill(
+              icon: Icons.touch_app,
+              label: tactile >= 99
+                  ? 'Tactile paving throughout'
+                  : '${tactile.round()}% tactile paving',
+              color: tactile >= 60 ? AppColors.primary : AppColors.accentText,
+            ),
+            _StatusPill(
+              icon: Icons.airport_shuttle,
+              label: result.buggyFriendly
+                  ? 'Buggy-ready route'
+                  : 'Not buggy accessible',
+              color: result.buggyFriendly
+                  ? AppColors.primary
+                  : AppColors.textTertiary,
+            ),
+          ],
         ),
       ],
     );

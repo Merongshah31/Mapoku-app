@@ -2,8 +2,10 @@ import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/cupertino.dart' show CupertinoIcons;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:pointer_interceptor/pointer_interceptor.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/theme/app_theme.dart';
@@ -11,6 +13,7 @@ import '../features/sime_darby/data/sime_darby_demo_data.dart';
 import '../features/sime_darby/models/sime_darby_hub.dart';
 import '../features/sime_darby/services/accessible_pathfinder.dart';
 import '../features/sime_darby/services/route_hazards.dart';
+import '../features/sime_darby/services/voice_guide.dart';
 import '../features/sime_darby/widgets/navigation_panels.dart';
 import '../features/sime_darby/widgets/route_hazards_card.dart';
 import '../features/sime_darby/widgets/route_metrics_card.dart';
@@ -62,6 +65,18 @@ class _RoutesScreenState extends State<RoutesScreen> {
 
   bool get _accessibilityMode => _need.isAccessible;
 
+  /// Routing constraints for the traveller picked in the trip planner.
+  RouteProfile get _routeProfile => _need.profile;
+
+  /// Real-time spoken step guidance (blind / low-vision travellers).
+  bool _voiceEnabled = true;
+
+  /// Red noise-zone heatmap (sound-sensitive / neurodivergent travellers).
+  bool _noiseZonesVisible = true;
+
+  /// Latest computed route, kept for voice guidance.
+  PathResult _activeRouteCache = _noRoute;
+
   /// Starts the route mode from the member's saved profile, once.
   @override
   void didChangeDependencies() {
@@ -110,9 +125,14 @@ class _RoutesScreenState extends State<RoutesScreen> {
     return _pathfinder.findPath(
           hub: _hub,
           accessibleOnly: accessible,
+          profile: _routeProfile,
           blockedEdges: blocked,
         ) ??
-        _pathfinder.findPath(hub: _hub, accessibleOnly: accessible) ??
+        _pathfinder.findPath(
+          hub: _hub,
+          accessibleOnly: accessible,
+          profile: _routeProfile,
+        ) ??
         _noRoute;
   }
 
@@ -137,19 +157,71 @@ class _RoutesScreenState extends State<RoutesScreen> {
       _navStep = 0;
       _controlsVisible = true;
     });
+    HapticFeedback.mediumImpact();
+    _announce(route, 0);
   }
 
   void _nextStep(PathResult route) {
     final step = _navStep;
     if (step == null || step >= route.nodes.length - 1) return;
     setState(() => _navStep = step + 1);
+    HapticFeedback.selectionClick();
+    _announce(route, step + 1);
   }
 
   void _endNavigation() {
+    VoiceGuide.instance.stop();
     setState(() {
       _navStep = null;
       _controlsVisible = false;
     });
+  }
+
+  /// Reads the instruction for [step] out loud, replacing the previous one so
+  /// every step is announced exactly once (step-by-step voice guidance).
+  void _announce(PathResult route, int step) {
+    if (!_voiceEnabled) return;
+    final last = route.nodes.length - 1;
+    if (step >= last) {
+      VoiceGuide.instance.speak('You have arrived at ${_hub.pinBLabel}.');
+      return;
+    }
+    final next = route.nodes[step + 1];
+    final metres = step < route.edges.length
+        ? route.edges[step].lengthMeters
+        : 0.0;
+    VoiceGuide.instance.speak(spokenInstruction(next, metres));
+  }
+
+  /// Turns step-by-step voice guidance on or off.
+  void _toggleVoice() {
+    setState(() => _voiceEnabled = !_voiceEnabled);
+    VoiceGuide.instance.setEnabled(_voiceEnabled);
+    final step = _navStep;
+    if (_voiceEnabled && step != null) _announce(_activeRouteCache, step);
+  }
+
+  /// Shows or hides the red noise-zone heatmap on the map.
+  void _toggleNoiseZones() {
+    setState(() => _noiseZonesVisible = !_noiseZonesVisible);
+  }
+
+  /// One-touch SOS for special-disability users: reach family or the estate
+  /// security guard with the traveller's live location attached.
+  Future<void> _openPanic() async {
+    HapticFeedback.heavyImpact();
+    final contacts = AppScope.of(context).profile.contacts;
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => _PanicSheet(
+        hubName: _hub.name,
+        locationLabel: _hub.pinALabel,
+        coordinates: _hub.pinA,
+        contacts: contacts,
+      ),
+    );
   }
 
   void _onHubChanged(int index) {
@@ -283,15 +355,22 @@ class _RoutesScreenState extends State<RoutesScreen> {
   Widget build(BuildContext context) {
     final hub = _hub;
     final reports = AppScope.of(context).communityObstacles;
-    final mode = _accessibilityMode;
-
-    final hazards = RouteHazards.forHub(hub, reports, accessible: mode);
-    final active = _route(accessible: mode, hazards: hazards);
-    final usual = _route(accessible: mode, hazards: const <RouteHazard>[]);
+    final stepFreeMode = _need.requiresStepFree;
+    final hazards = RouteHazards.forHub(
+      hub,
+      reports,
+      accessible: stepFreeMode,
+    );
+    final active = _route(accessible: stepFreeMode, hazards: hazards);
+    _activeRouteCache = active;
+    final usual = _route(
+      accessible: stepFreeMode,
+      hazards: const <RouteHazard>[],
+    );
     final assessed = RouteHazards.assess(hazards, usual: usual, active: active);
     final alternate = _route(
-      accessible: !mode,
-      hazards: RouteHazards.forHub(hub, reports, accessible: !mode),
+      accessible: !stepFreeMode,
+      hazards: RouteHazards.forHub(hub, reports, accessible: !stepFreeMode),
     );
     final avoided = assessed
         .where((h) => h.impact == HazardImpact.avoided)
@@ -326,6 +405,8 @@ class _RoutesScreenState extends State<RoutesScreen> {
                 onUserInteracted: navStep == null ? _collapseSheet : null,
                 bottomInset: navStep == null ? controlsBottom : 190,
                 showMapControls: _controlsVisible,
+                showNoiseZones: _noiseZonesVisible,
+                onToggleNoiseZones: _toggleNoiseZones,
               ),
             ),
 
@@ -367,6 +448,13 @@ class _RoutesScreenState extends State<RoutesScreen> {
               ),
             ),
 
+            // 3b. One-touch SOS, always reachable for special-disability users.
+            Positioned(
+              top: _gap + 104,
+              right: _gap,
+              child: PointerInterceptor(child: _SosButton(onTap: _openPanic)),
+            ),
+
             // 4. Navigation panel while walking, otherwise the draggable trip sheet.
             if (navStep != null)
               Positioned(
@@ -384,6 +472,8 @@ class _RoutesScreenState extends State<RoutesScreen> {
                         onNext: () => _nextStep(active),
                         onEnd: _endNavigation,
                         onReport: _reportHere,
+                        voiceEnabled: _voiceEnabled,
+                        onToggleVoice: _toggleVoice,
                       ),
                     ),
                   ),
@@ -805,6 +895,56 @@ class _MiniTag extends StatelessWidget {
   }
 }
 
+/// One-touch SOS control, kept on screen for every traveller but sized and
+/// worded for special-disability users and their carers.
+class _SosButton extends StatelessWidget {
+  const _SosButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Emergency SOS. Double tap for emergency options.',
+      child: Material(
+        color: AppColors.danger,
+        shape: const CircleBorder(),
+        elevation: 4,
+        shadowColor: const Color(0x55DC2626),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: const SizedBox(
+            width: 58,
+            height: 58,
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: <Widget>[
+                Icon(
+                  CupertinoIcons.exclamationmark_triangle_fill,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                SizedBox(height: 1),
+                Text(
+                  'SOS',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.6,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A single fact row used by the node detail sheet.
 class _NodeFact extends StatelessWidget {
   const _NodeFact({
@@ -830,6 +970,241 @@ class _NodeFact extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Emergency sheet: reach family, the estate security guard or 999, with the
+/// traveller's live location attached. mapOKU never sends anything on its own —
+/// every action is an explicit tap that the dialler / messaging app confirms.
+class _PanicSheet extends StatelessWidget {
+  const _PanicSheet({
+    required this.hubName,
+    required this.locationLabel,
+    required this.coordinates,
+    required this.contacts,
+  });
+
+  final String hubName;
+  final String locationLabel;
+  final LatLng coordinates;
+  final List<EmergencyContact> contacts;
+
+  /// Demo estate security desk number for the Sime Darby Property hubs.
+  static const String _guardPhone = '+60123456789';
+
+  /// Shared, privacy-light SOS text carrying the live position.
+  String get _locationText =>
+      'mapOKU SOS. I need help near $locationLabel, $hubName. '
+      'My location: ${coordinates.latitude.toStringAsFixed(5)}, '
+      '${coordinates.longitude.toStringAsFixed(5)}.';
+
+  Future<void> _call(String phone) async {
+    try {
+      await launchUrl(Uri.parse('tel:$phone'));
+    } catch (_) {
+      // No dialler on this device.
+    }
+  }
+
+  Future<void> _sms(String phone) async {
+    final body = Uri.encodeComponent(_locationText);
+    try {
+      await launchUrl(Uri.parse('sms:$phone?body=$body'));
+    } catch (_) {
+      // No messaging app on this device.
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = contacts.take(2).toList();
+
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Row(
+              children: <Widget>[
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: const BoxDecoration(
+                    color: AppColors.dangerSoft,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    CupertinoIcons.exclamationmark_triangle_fill,
+                    color: AppColors.danger,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Emergency SOS',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Your location travels with every call and message: '
+              '${coordinates.latitude.toStringAsFixed(5)}, '
+              '${coordinates.longitude.toStringAsFixed(5)}.',
+              style: const TextStyle(
+                fontSize: 12.5,
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: () => _call('999'),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+                backgroundColor: AppColors.danger,
+              ),
+              icon: const Icon(CupertinoIcons.phone_fill, size: 18),
+              label: const Text('Call 999 emergency services'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _call(_guardPhone),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+              ),
+              icon: const Icon(Icons.security, size: 18),
+              label: const Text('Call estate security guard (demo)'),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => _sms(_guardPhone),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(50),
+              ),
+              icon: const Icon(CupertinoIcons.chat_bubble_text, size: 18),
+              label: const Text('Send guard my location'),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Family and emergency contacts',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (shown.isEmpty)
+              const Text(
+                'No emergency contacts saved yet. Add them in Profile so SOS '
+                'can reach your family in one tap.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textTertiary,
+                  fontWeight: FontWeight.w600,
+                ),
+              )
+            else
+              for (final contact in shown)
+                _ContactRow(
+                  contact: contact,
+                  onCall: () => _call(contact.phone),
+                  onMessage: () => _sms(contact.phone),
+                ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One saved emergency contact with call and message actions.
+class _ContactRow extends StatelessWidget {
+  const _ContactRow({
+    required this.contact,
+    required this.onCall,
+    required this.onMessage,
+  });
+
+  final EmergencyContact contact;
+  final VoidCallback onCall;
+  final VoidCallback onMessage;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.fromLTRB(14, 8, 8, 8),
+      decoration: BoxDecoration(
+        color: AppColors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusMd),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  contact.name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Text(
+                  '${contact.relationship} · ${contact.phone}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            tooltip: 'Call ${contact.name}',
+            onPressed: onCall,
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.mint,
+              minimumSize: const Size(44, 44),
+            ),
+            icon: const Icon(
+              CupertinoIcons.phone_fill,
+              color: AppColors.primary,
+              size: 18,
+            ),
+          ),
+          IconButton(
+            tooltip: 'Message ${contact.name}',
+            onPressed: onMessage,
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.field,
+              minimumSize: const Size(44, 44),
+            ),
+            icon: const Icon(
+              CupertinoIcons.chat_bubble_text,
+              color: AppColors.textPrimary,
+              size: 18,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

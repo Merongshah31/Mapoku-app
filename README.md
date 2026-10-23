@@ -11,6 +11,9 @@ Apple-inspired design language.
 The Routes screen is a **real-world 3D pedestrian and OKU wayfinding demo for
 Sime Darby Property**, built on **MapLibre GL** (`maplibre_gl`) so it runs on
 Android, iOS and web from one codebase — no API key and no WebView.
+It also **speaks its directions**, reads simulated **IoT noise sensors** and
+carries a one-touch **emergency SOS** for blind, neurodivergent and
+buggy-using travellers.
 
 ## Sime Darby Property 3D demo
 
@@ -63,6 +66,11 @@ diagonals.
 - **Live metrics card** — township name and category, distance (m), estimated
   walk time, accessibility score (100% step-free) and covered-walkway %.
   Distances are computed from the real geodesic length of the drawn route.
+- **Sensory routing** — switch the accessibility need to `Sound-sensitive`,
+  `Light-sensitive`, `Blind / white cane` or `Buggy / mobility` and watch the
+  A* route change. The **noise heatmap** and live dB badges light up on the map.
+- **Voice + SOS** — start navigation and **every step is spoken aloud**; tap the
+  red **SOS** button at any time for a one-touch emergency call carrying GPS.
 
 ### Full-screen map layout (Google Maps style)
 
@@ -94,7 +102,69 @@ Inside the bottom sheet, the original app's trip search is preserved:
 - **From** — shows the active Pin A address, with a microphone affordance
 - **To** — shows the active Pin B address, with magnifier + microphone affordances
 - **Accessibility need** dropdown — `Wheelchair`, `Crutches / Elderly`,
-  `Visual Impairment / Tactile`, `Standard Pedestrian`, wired to the route mode
+  `Visual Impairment / Tactile`, `Standard Pedestrian`, plus the four sensory
+  profiles below (`Blind / white cane`, `Sound-sensitive`, `Light-sensitive`,
+  `Buggy / mobility`). Each need re-weights the A* router.
+
+## Sensory & emergency features
+
+Built for blind, neurodivergent and buggy-using travellers. These layer on top
+of the design above — **no existing screen was redesigned**, they are additive.
+
+### Four new routing profiles
+
+The `Accessibility need` control gained four profiles alongside the existing
+wheelchair / crutches / visual-impairment options:
+
+| Need | How the route changes |
+| --- | --- |
+| **Blind / white cane** | prefers **tactile paving** and avoids wide-open crossings |
+| **Sound-sensitive** | pushes away from loud roads and station forecourts |
+| **Light-sensitive** | keeps to shade, avoids direct sun and glass glare |
+| **Buggy / mobility** | needs step-free edges at least **2 m** wide |
+
+Each need maps to a `RouteProfile` — `stepFree`, `avoidNoise`,
+`avoidBright`, `needsTactile`, `needsBuggy` — which re-weights the A* cost
+function. An edge rated `veryNoisy` or `veryBright` becomes **impassable**
+for the matching profile, so the router genuinely detours instead of merely
+penalising the edge. Every hub ships the extra metadata:
+`noiseLevel`, `lightLevel`, `hasTactilePaving`, `buggyAccessible` and
+`widthMeters` per edge.
+
+### Live noise heatmap from IoT sensors
+
+- Every hub carries **4 simulated IoT sound sensors** (`NoiseSensor`) with a
+  real dB reading — e.g. `92 dB` on the SJ7 crossing, `44 dB` on an Elmina
+  ramp.
+- Sensors render as a **red heatmap**: a soft glow halo plus a solid core
+  (MapLibre `circle` layers), with a **live dB badge** floating above each one.
+- A round **toggle button** on the map shows or hides the whole noise layer.
+
+### Spoken turn-by-turn guidance
+
+- `VoiceGuide` wraps **`flutter_tts`** for real device speech.
+- **Every navigation step is announced** as it appears — *"In 20 m, take the
+  lift at SJ7 LRT Accessible Lift."* — and re-announced whenever the step
+  changes. **Haptics** fire on each step change too.
+- A **speaker toggle** in the navigation panel mutes and unmutes the voice.
+
+### One-touch SOS
+
+A red **SOS** button floats on the map, reachable at any time. It opens an
+emergency sheet with:
+
+- **Call 999**
+- **Call the estate security guard** (demo number)
+- **Send the guard my location** — an SMS carrying live GPS coordinates
+- **Call / message** the user's saved emergency contacts
+
+The current GPS position is embedded in every call and SMS.
+
+### Sensory read-out on the metrics card
+
+The live metrics card gained a **Sensory profile** row: worst noise level (dB),
+worst light level, the **% of the route on tactile paving**, and whether the
+route is buggy-friendly.
 
 ## Features
 
@@ -104,6 +174,10 @@ Inside the bottom sheet, the original app's trip search is preserved:
   location, description and an optional photo.
 - **Rewards** — Points wallet with a hardcoded catalogue that redeems real
   voucher codes, plus redemption history. Reporting an obstacle awards points.
+- **Voice guidance** — spoken turn-by-turn directions via `flutter_tts`, with a
+  mute toggle and haptics on every step change.
+- **Emergency SOS** — one tap to call 999, the estate guard or a saved contact,
+  plus an SMS that carries the traveller's live GPS location.
 
 ## Hardcoded + real data
 
@@ -137,6 +211,7 @@ lib/
     ├── data/sime_darby_demo_data.dart      # 3 hubs: real coords + graphs
     ├── models/sime_darby_hub.dart          # nodes, edges (with geometry), hub
     ├── services/accessible_pathfinder.dart # A* OKU routing over real coords
+    ├── services/voice_guide.dart           # flutter_tts spoken guidance
     └── widgets/
         ├── sime_darby_map.dart             # MapLibre 3D street map + badges
         ├── sime_darby_selector.dart        # branded hub selector
@@ -156,6 +231,9 @@ edges carry real street-following polylines:
 - the simulated construction barrier removes an edge entirely
 - the winning path concatenates each edge's geometry, and the metrics card
   reports the **real geodesic length** of that route
+- a `RouteProfile` (from the selected accessibility need) adds multipliers for
+  noise, glare, missing tactile paving and narrow edges, and removes
+  `veryNoisy` / `veryBright` edges from the graph entirely
 
 Because the authored edge weights are not proportional to the geometric
 distance between nodes, the heuristic uses the cheapest "cost per metre" across
@@ -167,6 +245,8 @@ remains optimal. Behaviour is locked down by
 
 - Flutter **3.29+**, Dart **3.7+**
 - Android: API 21+, JDK 21 recommended for Gradle builds, `INTERNET` permission
+- `flutter_tts` needs the `TTS_SERVICE` `<queries>` entry on Android 11+ (added),
+  and **no iOS permission** — it synthesises speech only, it never listens
 - iOS: deployment target **13.0+** (already set)
 - Web: a browser with **WebGL2** (Safari 15+)
 - Internet access is required for OpenFreeMap vector tiles

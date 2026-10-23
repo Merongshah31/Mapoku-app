@@ -63,6 +63,8 @@ class SimeDarbyMap extends StatefulWidget {
     this.onUserInteracted,
     this.bottomInset = 12,
     this.showMapControls = true,
+    this.showNoiseZones = true,
+    this.onToggleNoiseZones,
   });
 
   final SimeDarbyHub hub;
@@ -96,6 +98,12 @@ class SimeDarbyMap extends StatefulWidget {
   /// underneath it.
   final bool showMapControls;
 
+  /// Draws the red noise-zone heatmap from the hub's IoT sound sensors.
+  final bool showNoiseZones;
+
+  /// Fired by the map's noise toggle button.
+  final VoidCallback? onToggleNoiseZones;
+
   @override
   State<SimeDarbyMap> createState() => _SimeDarbyMapState();
 }
@@ -103,6 +111,15 @@ class SimeDarbyMap extends StatefulWidget {
 /// Emerald for OKU-safe routes, red for stairs / obstacles.
 const String _availableRouteColor = '#10b981';
 const String _stairsRouteColor = '#ef4444';
+
+/// IoT sensory heatmap palette. The stops mirror [NoiseZone], so the gradient
+/// layers, the decibel badges and the on-map legend always agree.
+const String _noiseCalmColor = '#38bdf8';
+const String _noiseCalmGreen = '#22c55e';
+const String _noiseModerateColor = '#f59e0b';
+const String _noiseWarmColor = '#f97316';
+const String _noiseDangerColor = '#ef4444';
+const String _noiseDangerDeepColor = '#b91c1c';
 
 class _SimeDarbyMapState extends State<SimeDarbyMap> {
   static const _buildingLayer = 'mapoku-3d-buildings';
@@ -116,6 +133,12 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
   static const _routeArrows = 'mapoku-route-arrows';
   static const _nodesSource = 'mapoku-nodes-src';
   static const _nodeHalo = 'mapoku-node-halo';
+  static const _noiseSource = 'mapoku-noise-src';
+  static const _noiseHeat = 'mapoku-noise-heat';
+  static const _noiseGlow = 'mapoku-noise-glow';
+  static const _noiseCore = 'mapoku-noise-core';
+  static const _noiseAlarmSource = 'mapoku-noise-alarm-src';
+  static const _noisePulse = 'mapoku-noise-pulse';
 
   /// Marching dash frames so direction markers flow along the route.
   static const List<List<double>> _dashFrames = <List<double>>[
@@ -133,6 +156,10 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
   bool _styleReady = false;
   Timer? _arrowTimer;
   int _arrowFrame = 0;
+
+  /// Breathes the red danger rings so the loud zone reads as "live".
+  Timer? _noiseTimer;
+  int _noisePulseFrame = 0;
 
   /// True while the app (not the user) is moving the camera.
   bool _animatingCamera = false;
@@ -176,11 +203,16 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       _refreshRouteColors();
       _updateOverlays(force: true);
     }
+    if (oldWidget.showNoiseZones != widget.showNoiseZones) {
+      _applyNoiseVisibility();
+      _updateOverlays(force: true);
+    }
   }
 
   @override
   void dispose() {
     _arrowTimer?.cancel();
+    _noiseTimer?.cancel();
     super.dispose();
   }
 
@@ -213,6 +245,7 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
     await _addRouteLayers();
     await _refreshRouteSources();
     await _refreshRouteColors();
+    await _applyNoiseVisibility();
 
     _styleReady = true;
     await _flyToHub();
@@ -291,6 +324,203 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
         circleStrokeWidth: 2,
       ),
     );
+
+    // IoT sensory heatmap (neurodivergent mode): a smooth density gradient
+    // under the routes, a zone coloured halo and core per sensor, and a
+    // pulsing red ring on every sensor above 75 dB.
+    await controller.addGeoJsonSource(
+      _noiseSource,
+      _noiseFeature(const <NoiseSensor>[]),
+    );
+    await controller.addHeatmapLayer(
+      _noiseSource,
+      _noiseHeat,
+      _noiseHeatProperties(visible: false),
+      // Below the route so the glowing path always stays readable.
+      belowLayerId: _routeShadow,
+    );
+    await controller.addCircleLayer(
+      _noiseSource,
+      _noiseGlow,
+      _noiseGlowProperties(visible: false),
+    );
+    await controller.addGeoJsonSource(
+      _noiseAlarmSource,
+      _noiseFeature(const <NoiseSensor>[]),
+    );
+    await controller.addCircleLayer(
+      _noiseAlarmSource,
+      _noisePulse,
+      _noisePulseProperties(1),
+    );
+    await controller.addCircleLayer(
+      _noiseSource,
+      _noiseCore,
+      _noiseCoreProperties(visible: false),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // IoT sensory heatmap
+  // ---------------------------------------------------------------------------
+
+  /// The loud sensors that get the pulsing red ring.
+  List<NoiseSensor> get _dangerSensors => widget.hub.noiseSensors
+      .where((sensor) => sensor.zone.isDanger)
+      .toList();
+
+  /// Data driven colour shared by the halo and the core: calm blue, calm
+  /// green, amber, then the danger red.
+  static List<dynamic> get _zoneColorExpression => <dynamic>[
+    'interpolate',
+    <dynamic>['linear'],
+    <dynamic>['get', 'db'],
+    45, _noiseCalmColor,
+    55, _noiseCalmGreen,
+    65, _noiseModerateColor,
+    75, _noiseWarmColor,
+    85, _noiseDangerColor,
+  ];
+
+  /// Paint for the smooth, continuous heatmap gradient.
+  ///
+  /// Every property is always supplied, because `setLayerProperties` writes
+  /// nulls for omitted keys, which would reset the layer.
+  HeatmapLayerProperties _noiseHeatProperties({required bool visible}) {
+    return HeatmapLayerProperties(
+      // Quiet sensors barely contribute while loud ones dominate the density,
+      // so the hot spots go red and the calm walkways stay blue / green.
+      heatmapWeight: <dynamic>[
+        'interpolate',
+        <dynamic>['linear'],
+        <dynamic>['get', 'db'],
+        40, 0.04,
+        55, 0.22,
+        70, 0.55,
+        85, 1,
+      ],
+      heatmapRadius: <dynamic>[
+        'interpolate',
+        <dynamic>['linear'],
+        <dynamic>['zoom'],
+        13, 16,
+        17, 40,
+        20, 76,
+      ],
+      heatmapIntensity: 1.05,
+      // Density to colour ramp: soft blue, green, amber, orange, then red.
+      heatmapColor: <dynamic>[
+        'interpolate',
+        <dynamic>['linear'],
+        <dynamic>[Expressions.heatmapDensity],
+        0, 'rgba(56,189,248,0)',
+        0.12, _noiseCalmColor,
+        0.3, _noiseCalmGreen,
+        0.55, _noiseModerateColor,
+        0.74, _noiseWarmColor,
+        1, _noiseDangerColor,
+      ],
+      heatmapOpacity: visible ? 0.78 : 0,
+    );
+  }
+
+  /// Zone coloured halo, wider on the louder sensors.
+  CircleLayerProperties _noiseGlowProperties({required bool visible}) {
+    return CircleLayerProperties(
+      circleRadius: <dynamic>[
+        'interpolate',
+        <dynamic>['linear'],
+        <dynamic>['get', 'db'],
+        40, 30,
+        55, 40,
+        70, 54,
+        90, 72,
+      ],
+      circleColor: _zoneColorExpression,
+      circleOpacity: visible ? 0.2 : 0,
+      circleBlur: 0.9,
+      circleStrokeWidth: 0,
+    );
+  }
+
+  /// The solid marker that pins each sensor to its exact coordinate.
+  CircleLayerProperties _noiseCoreProperties({required bool visible}) {
+    return CircleLayerProperties(
+      circleRadius: 15,
+      circleColor: _zoneColorExpression,
+      circleOpacity: visible ? 0.92 : 0,
+      circleStrokeColor: '#ffffff',
+      circleStrokeWidth: visible ? 2 : 0,
+    );
+  }
+
+  /// The breathing red ring around the loud sensors. [phase] runs from 0
+  /// (tight and solid) to 1 (wide and fully faded).
+  CircleLayerProperties _noisePulseProperties(double phase) {
+    return CircleLayerProperties(
+      circleRadius: 22 + 34 * phase,
+      circleColor: _noiseDangerColor,
+      circleOpacity: 0.45 * (1 - phase),
+      circleBlur: 0.55,
+      circleStrokeColor: _noiseDangerDeepColor,
+      circleStrokeWidth: 2 * (1 - phase),
+    );
+  }
+
+  /// Shows or hides the IoT sensory heatmap and starts or stops its pulse.
+  ///
+  /// Paint properties are always fully specified because
+  /// `setLayerProperties` writes nulls for omitted keys.
+  Future<void> _applyNoiseVisibility() async {
+    final controller = _controller;
+    if (controller == null || !_styleReady) return;
+    final visible = widget.showNoiseZones;
+
+    if (visible) {
+      _startNoisePulse();
+    } else {
+      _noiseTimer?.cancel();
+      _noiseTimer = null;
+    }
+
+    try {
+      await controller.setLayerProperties(
+        _noiseHeat,
+        _noiseHeatProperties(visible: visible),
+      );
+      await controller.setLayerProperties(
+        _noiseGlow,
+        _noiseGlowProperties(visible: visible),
+      );
+      await controller.setLayerProperties(
+        _noiseCore,
+        _noiseCoreProperties(visible: visible),
+      );
+      await controller.setLayerProperties(
+        _noisePulse,
+        _noisePulseProperties(visible ? 0 : 1),
+      );
+    } catch (_) {
+      // The map may be mid-rebuild; the next update will retry.
+    }
+  }
+
+  /// Breathes the red danger rings so the loud zone reads as "live".
+  void _startNoisePulse() {
+    _noiseTimer?.cancel();
+    _noiseTimer = Timer.periodic(const Duration(milliseconds: 110), (_) async {
+      final controller = _controller;
+      if (controller == null || !mounted) return;
+      _noisePulseFrame = (_noisePulseFrame + 1) % 14;
+      try {
+        await controller.setLayerProperties(
+          _noisePulse,
+          _noisePulseProperties(_noisePulseFrame / 13),
+        );
+      } catch (_) {
+        // The map may be mid-rebuild; the next frame will retry.
+      }
+    });
   }
 
   /// The direction-dash paint must always carry every property, because
@@ -325,6 +555,14 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
         _pointFeatures(<geo.LatLng>[
           for (final node in widget.hub.nodes) node.position,
         ]),
+      );
+      await controller.setGeoJsonSource(
+        _noiseSource,
+        _noiseFeature(widget.hub.noiseSensors),
+      );
+      await controller.setGeoJsonSource(
+        _noiseAlarmSource,
+        _noiseFeature(_dangerSensors),
       );
     } catch (_) {
       // The map may be mid-rebuild; the next update will retry.
@@ -513,6 +751,12 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       targets['hazard:${hazard.obstacle.id}'] = hazard.obstacle.position;
     }
 
+    if (widget.showNoiseZones) {
+      for (final sensor in widget.hub.noiseSensors) {
+        targets['noise:${sensor.id}'] = sensor.position;
+      }
+    }
+
     final next = <String, Offset>{};
     for (final entry in targets.entries) {
       try {
@@ -618,12 +862,47 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
       );
     }
 
+    if (widget.showNoiseZones) {
+      for (final sensor in widget.hub.noiseSensors) {
+        final position = _overlayPositions['noise:${sensor.id}'];
+        if (position == null) continue;
+        widgets.add(
+          Positioned(
+            key: ValueKey<String>('noise-badge-${sensor.id}'),
+            left: position.dx - 34,
+            top: position.dy - 13,
+            child: IgnorePointer(
+              child: _NoiseBadge(
+                key: ValueKey<String>('noise-pill-${sensor.id}'),
+                sensor: sensor,
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     if (widget.showMapControls) {
       widgets.add(
         Positioned(
           right: 12,
           bottom: widget.bottomInset,
-          child: _LocateButton(onTap: _goToMyLocation),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: <Widget>[
+              _HeatmapToggle(
+                active: widget.showNoiseZones,
+                onTap: widget.onToggleNoiseZones,
+              ),
+              if (widget.showNoiseZones) ...<Widget>[
+                const SizedBox(height: 8),
+                const _NoiseLegend(),
+              ],
+              const SizedBox(height: 10),
+              _LocateButton(onTap: _goToMyLocation),
+            ],
+          ),
         ),
       );
     }
@@ -711,6 +990,32 @@ class _SimeDarbyMapState extends State<SimeDarbyMap> {
             'geometry': <String, dynamic>{
               'type': 'Point',
               'coordinates': <double>[point.longitude, point.latitude],
+            },
+          },
+      ],
+    };
+  }
+
+  /// GeoJSON points for the IoT sound sensors, each carrying its live dB
+  /// reading so the heatmap layers can show where the loud zones are.
+  Map<String, dynamic> _noiseFeature(List<NoiseSensor> sensors) {
+    return <String, dynamic>{
+      'type': 'FeatureCollection',
+      'features': <Map<String, dynamic>>[
+        for (final sensor in sensors)
+          <String, dynamic>{
+            'type': 'Feature',
+            'properties': <String, dynamic>{
+              'id': sensor.id,
+              'db': sensor.db,
+              'zone': sensor.zone.name,
+            },
+            'geometry': <String, dynamic>{
+              'type': 'Point',
+              'coordinates': <double>[
+                sensor.position.longitude,
+                sensor.position.latitude,
+              ],
             },
           },
       ],
@@ -896,6 +1201,130 @@ class _HazardMarker extends StatelessWidget {
   }
 }
 
+/// Live decibel badge shown over each IoT sound sensor on the noise heatmap.
+///
+/// The fill follows [NoiseZone], so a calm sensor reads blue, a moderate one
+/// amber, and a loud one pulses red.
+class _NoiseBadge extends StatelessWidget {
+  const _NoiseBadge({super.key, required this.sensor});
+
+  final NoiseSensor sensor;
+
+  @override
+  Widget build(BuildContext context) {
+    final zone = sensor.zone;
+    final label = '${sensor.db.round()} dB';
+
+    return Semantics(
+      label: 'Noise sensor ${sensor.label}: $label, ${zone.label}',
+      child: _NoiseBadgeSurface(
+        zone: zone,
+        label: label,
+        pulsing: zone.isDanger,
+      ),
+    );
+  }
+}
+
+/// The badge pill itself. [pulsing] adds the red heartbeat that marks the
+/// danger zone, so a loud walkway pulls the eye straight away.
+class _NoiseBadgeSurface extends StatefulWidget {
+  const _NoiseBadgeSurface({
+    required this.zone,
+    required this.label,
+    required this.pulsing,
+  });
+
+  final NoiseZone zone;
+  final String label;
+  final bool pulsing;
+
+  @override
+  State<_NoiseBadgeSurface> createState() => _NoiseBadgeSurfaceState();
+}
+
+class _NoiseBadgeSurfaceState extends State<_NoiseBadgeSurface>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.pulsing) _pulse.repeat(reverse: true);
+  }
+
+  @override
+  void didUpdateWidget(covariant _NoiseBadgeSurface oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.pulsing && !_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    } else if (!widget.pulsing && _pulse.isAnimating) {
+      _pulse
+        ..stop()
+        ..value = 1;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final zone = widget.zone;
+
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final t = widget.pulsing ? _pulse.value : 1.0;
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: zone.darkColor,
+            borderRadius: BorderRadius.circular(999),
+            border: Border.all(color: Colors.white, width: 1.5),
+            boxShadow: <BoxShadow>[
+              // Only the danger zone glows, and it glows in its own colour.
+              if (widget.pulsing)
+                BoxShadow(
+                  color: zone.color.withValues(alpha: 0.55 * t),
+                  blurRadius: 4 + 10 * t,
+                  spreadRadius: 1 + 3 * t,
+                ),
+              const BoxShadow(
+                color: Color(0x55000000),
+                blurRadius: 6,
+                offset: Offset(0, 2),
+              ),
+            ],
+          ),
+          child: child,
+        );
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          const Icon(Icons.graphic_eq, size: 11, color: Colors.white),
+          const SizedBox(width: 4),
+          Text(
+            widget.label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Recentre-on-my-location control, matching the mapOKU controls.
 class _LocateButton extends StatelessWidget {
   const _LocateButton({required this.onTap});
@@ -915,6 +1344,151 @@ class _LocateButton extends StatelessWidget {
           padding: EdgeInsets.all(12),
           child: Icon(CupertinoIcons.location_fill, color: AppColors.primary, size: 20),
         ),
+      ),
+    );
+  }
+}
+
+/// Labelled toggle for the IoT sensory heatmap, written for neurodivergent
+/// travellers: the headphone glyph plus plain language beats a bare icon.
+class _HeatmapToggle extends StatelessWidget {
+  const _HeatmapToggle({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = active ? Colors.white : AppColors.primary;
+
+    return Semantics(
+      button: true,
+      toggled: active,
+      label: 'IoT sensory heatmap, neurodivergent mode',
+      child: Tooltip(
+        message: active
+            ? 'Hide the IoT sensory heatmap'
+            : 'Show the IoT sensory heatmap (neurodivergent mode)',
+        child: Material(
+          color: active ? AppColors.forest : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          elevation: 3,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(18),
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(11, 7, 13, 7),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  Icon(Icons.headphones, size: 19, color: foreground),
+                  const SizedBox(width: 8),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        'IoT Sensory Heatmap',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: foreground,
+                        ),
+                      ),
+                      Text(
+                        'Neurodivergent mode',
+                        style: TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: active
+                              ? Colors.white.withValues(alpha: 0.72)
+                              : AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Colour key for the IoT sensory heatmap, shown while the layer is on.
+class _NoiseLegend extends StatelessWidget {
+  const _NoiseLegend();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(10, 8, 12, 9),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: const <BoxShadow>[
+          BoxShadow(
+            color: Color(0x33000000),
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          const Text(
+            'AMBIENT NOISE',
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.6,
+              color: AppColors.forest,
+            ),
+          ),
+          const SizedBox(height: 6),
+          for (final zone in NoiseZone.values) _row(zone),
+        ],
+      ),
+    );
+  }
+
+  Widget _row(NoiseZone zone) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          Container(
+            width: 12,
+            height: 12,
+            decoration: BoxDecoration(
+              color: zone.color,
+              shape: BoxShape.circle,
+              border: Border.all(color: zone.darkColor, width: 2),
+            ),
+          ),
+          const SizedBox(width: 7),
+          Text(
+            zone.label,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            zone.range,
+            style: const TextStyle(
+              fontSize: 9.5,
+              color: AppColors.textTertiary,
+            ),
+          ),
+        ],
       ),
     );
   }

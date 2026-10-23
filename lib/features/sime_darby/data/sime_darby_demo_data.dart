@@ -38,6 +38,36 @@ class SimeDarbyDemoData {
     endNodeId: 'sj-n4',
     simulationEdge: <String>['sj-n2', 'sj-n3'],
     simulationLabel: 'Elevated link bridge section closed for works',
+    noiseSensors: <NoiseSensor>[
+      NoiseSensor(
+        id: 'sj-a1',
+        position: LatLng(3.0838, 101.5879),
+        db: 88,
+        radiusMeters: 45,
+        label: 'SJ7 station service road',
+      ),
+      NoiseSensor(
+        id: 'sj-a2',
+        position: LatLng(3.0836, 101.5882),
+        db: 92,
+        radiusMeters: 40,
+        label: 'Level crossing at SJ7',
+      ),
+      NoiseSensor(
+        id: 'sj-a3',
+        position: LatLng(3.0847, 101.5867),
+        db: 68,
+        radiusMeters: 35,
+        label: 'Covered link bridge ramp',
+      ),
+      NoiseSensor(
+        id: 'sj-a4',
+        position: LatLng(3.0834, 101.5894),
+        db: 52,
+        radiusMeters: 40,
+        label: 'SJCC East Lobby plaza',
+      ),
+    ],
     nodes: <HubNode>[
       HubNode(
         id: 'sj-n1',
@@ -80,6 +110,11 @@ class SimeDarbyDemoData {
         from: 'sj-n1',
         to: 'sj-n2',
         covered: true,
+        noiseLevel: NoiseLevel.quiet,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 1.6,
         label: 'Accessible lift to link bridge',
         geometry: <LatLng>[
           LatLng(3.0845, 101.5861),
@@ -92,6 +127,11 @@ class SimeDarbyDemoData {
         from: 'sj-n2',
         to: 'sj-n3',
         covered: true,
+        noiseLevel: NoiseLevel.moderate,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 1.8,
         label: 'Covered elevated bridge',
         geometry: <LatLng>[
           LatLng(3.0852, 101.5874),
@@ -104,6 +144,11 @@ class SimeDarbyDemoData {
         from: 'sj-n3',
         to: 'sj-n4',
         covered: true,
+        noiseLevel: NoiseLevel.moderate,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.6,
         label: 'Drop-off to East Lobby',
         geometry: <LatLng>[
           LatLng(3.0843, 101.5889),
@@ -115,6 +160,11 @@ class SimeDarbyDemoData {
       HubEdge(
         from: 'sj-n1',
         to: 'sj-s1',
+        noiseLevel: NoiseLevel.veryNoisy,
+        lightLevel: LightLevel.veryBright,
+        hasTactilePaving: false,
+        buggyAccessible: false,
+        widthMeters: 1.4,
         label: 'Station service road',
         geometry: <LatLng>[
           LatLng(3.0845, 101.5861),
@@ -127,6 +177,11 @@ class SimeDarbyDemoData {
         from: 'sj-s1',
         to: 'sj-n4',
         hasStairs: true,
+        noiseLevel: NoiseLevel.noisy,
+        lightLevel: LightLevel.bright,
+        hasTactilePaving: false,
+        buggyAccessible: false,
+        widthMeters: 1.2,
         label: 'Stairs to retail hub',
         geometry: <LatLng>[
           LatLng(3.0836, 101.5882),
@@ -139,6 +194,11 @@ class SimeDarbyDemoData {
         from: 'sj-n2',
         to: 'sj-n4',
         covered: true,
+        noiseLevel: NoiseLevel.quiet,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.4,
         label: 'South covered detour',
         geometry: <LatLng>[
           LatLng(3.0852, 101.5874),
@@ -169,6 +229,38 @@ class SimeDarbyDemoData {
     endNodeId: 'el-n4',
     simulationEdge: <String>['el-n2', 'el-n3'],
     simulationLabel: 'Tactile Park Walkway closed for works',
+    noiseSensors: <NoiseSensor>[
+      NoiseSensor(
+        id: 'el-a1',
+        position: LatLng(3.1840, 101.5128),
+        db: 86,
+        radiusMeters: 45,
+        label: 'Elmina park service road',
+      ),
+      NoiseSensor(
+        id: 'el-a2',
+        position: LatLng(3.1843, 101.5135),
+        // Amber band: a moderately busy crossing beside the quiet park
+        // walkway, so this hub shows all three heatmap zones.
+        db: 66,
+        radiusMeters: 40,
+        label: 'Roadside crossing at Elmina',
+      ),
+      NoiseSensor(
+        id: 'el-a3',
+        position: LatLng(3.1844, 101.5129),
+        db: 48,
+        radiusMeters: 40,
+        label: 'Tactile park walkway',
+      ),
+      NoiseSensor(
+        id: 'el-a4',
+        position: LatLng(3.1855, 101.5140),
+        db: 44,
+        radiusMeters: 35,
+        label: 'Wheelchair ramp north',
+      ),
+    ],
     nodes: <HubNode>[
       HubNode(
         id: 'el-n1',
@@ -208,6 +300,11 @@ class SimeDarbyDemoData {
         from: 'el-n1',
         to: 'el-n2',
         covered: true,
+        noiseLevel: NoiseLevel.quiet,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.6,
         label: 'Covered park walkway',
         geometry: <LatLng>[
           LatLng(3.1835, 101.5118),
@@ -219,6 +316,11 @@ class SimeDarbyDemoData {
       HubEdge(
         from: 'el-n2',
         to: 'el-n3',
+        noiseLevel: NoiseLevel.moderate,
+        lightLevel: LightLevel.moderate,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.4,
         label: 'Tactile park walkway',
         geometry: <LatLng>[
           LatLng(3.1844, 101.5129),
@@ -231,6 +333,11 @@ class SimeDarbyDemoData {
         from: 'el-n3',
         to: 'el-n4',
         covered: true,
+        noiseLevel: NoiseLevel.moderate,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.2,
         label: 'Wheelchair ramp to mall entrance',
         geometry: <LatLng>[
           LatLng(3.1855, 101.5140),
@@ -242,6 +349,11 @@ class SimeDarbyDemoData {
       HubEdge(
         from: 'el-n1',
         to: 'el-s1',
+        noiseLevel: NoiseLevel.veryNoisy,
+        lightLevel: LightLevel.veryBright,
+        hasTactilePaving: false,
+        buggyAccessible: false,
+        widthMeters: 1.5,
         label: 'Park service road',
         geometry: <LatLng>[
           LatLng(3.1835, 101.5118),
@@ -254,6 +366,11 @@ class SimeDarbyDemoData {
         from: 'el-s1',
         to: 'el-n4',
         hasStairs: true,
+        noiseLevel: NoiseLevel.noisy,
+        lightLevel: LightLevel.bright,
+        hasTactilePaving: false,
+        buggyAccessible: false,
+        widthMeters: 1.2,
         label: 'Stairs to mall forecourt',
         geometry: <LatLng>[
           LatLng(3.1843, 101.5135),
@@ -266,6 +383,11 @@ class SimeDarbyDemoData {
         from: 'el-n2',
         to: 'el-n4',
         covered: true,
+        noiseLevel: NoiseLevel.quiet,
+        lightLevel: LightLevel.moderate,
+        hasTactilePaving: false,
+        buggyAccessible: true,
+        widthMeters: 2.8,
         label: 'Lakeside north detour',
         geometry: <LatLng>[
           LatLng(3.1844, 101.5129),
@@ -295,6 +417,38 @@ class SimeDarbyDemoData {
     endNodeId: 'kl-n4',
     simulationEdge: <String>['kl-n2', 'kl-n3'],
     simulationLabel: 'Garden promenade closed for landscaping works',
+    noiseSensors: <NoiseSensor>[
+      NoiseSensor(
+        id: 'kl-a1',
+        position: LatLng(3.2241, 101.7285),
+        db: 82,
+        radiusMeters: 45,
+        label: 'KL East Mall drop-off',
+      ),
+      NoiseSensor(
+        id: 'kl-a2',
+        position: LatLng(3.2248, 101.7295),
+        db: 90,
+        radiusMeters: 40,
+        label: 'Roadside crossing at KL East',
+      ),
+      NoiseSensor(
+        id: 'kl-a3',
+        position: LatLng(3.2250, 101.7290),
+        // Amber band: the promenade beside the mall forecourt is busy but
+        // not loud, so this hub shows all three heatmap zones.
+        db: 58,
+        radiusMeters: 45,
+        label: 'Garden promenade',
+      ),
+      NoiseSensor(
+        id: 'kl-a4',
+        position: LatLng(3.2256, 101.7305),
+        db: 42,
+        radiusMeters: 35,
+        label: 'Residential lobby',
+      ),
+    ],
     nodes: <HubNode>[
       HubNode(
         id: 'kl-n1',
@@ -335,6 +489,11 @@ class SimeDarbyDemoData {
         from: 'kl-n1',
         to: 'kl-n2',
         covered: true,
+        noiseLevel: NoiseLevel.moderate,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.6,
         label: 'Mall to garden promenade',
         geometry: <LatLng>[
           LatLng(3.2241, 101.7285),
@@ -346,6 +505,11 @@ class SimeDarbyDemoData {
       HubEdge(
         from: 'kl-n2',
         to: 'kl-n3',
+        noiseLevel: NoiseLevel.quiet,
+        lightLevel: LightLevel.moderate,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 2.8,
         label: 'Step-free garden promenade',
         geometry: <LatLng>[
           LatLng(3.2250, 101.7290),
@@ -358,6 +522,11 @@ class SimeDarbyDemoData {
         from: 'kl-n3',
         to: 'kl-n4',
         covered: true,
+        noiseLevel: NoiseLevel.noisy,
+        lightLevel: LightLevel.bright,
+        hasTactilePaving: true,
+        buggyAccessible: false,
+        widthMeters: 1.9,
         label: 'Crossing to lobby lift',
         geometry: <LatLng>[
           LatLng(3.2253, 101.7298),
@@ -369,6 +538,11 @@ class SimeDarbyDemoData {
       HubEdge(
         from: 'kl-n1',
         to: 'kl-s1',
+        noiseLevel: NoiseLevel.veryNoisy,
+        lightLevel: LightLevel.veryBright,
+        hasTactilePaving: false,
+        buggyAccessible: false,
+        widthMeters: 1.4,
         label: 'Roadside footpath',
         geometry: <LatLng>[
           LatLng(3.2241, 101.7285),
@@ -381,6 +555,11 @@ class SimeDarbyDemoData {
         from: 'kl-s1',
         to: 'kl-n4',
         hasStairs: true,
+        noiseLevel: NoiseLevel.noisy,
+        lightLevel: LightLevel.bright,
+        hasTactilePaving: false,
+        buggyAccessible: false,
+        widthMeters: 1.2,
         label: 'Stairs to residence',
         geometry: <LatLng>[
           LatLng(3.2248, 101.7295),
@@ -393,6 +572,11 @@ class SimeDarbyDemoData {
         from: 'kl-n2',
         to: 'kl-n4',
         covered: true,
+        noiseLevel: NoiseLevel.quiet,
+        lightLevel: LightLevel.shaded,
+        hasTactilePaving: true,
+        buggyAccessible: true,
+        widthMeters: 3.0,
         label: 'Lake side promenade detour',
         geometry: <LatLng>[
           LatLng(3.2250, 101.7290),

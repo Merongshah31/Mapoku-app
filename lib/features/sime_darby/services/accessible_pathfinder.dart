@@ -46,6 +46,72 @@ class PathResult {
   int get accessibilityScore => hasStairs ? 62 : 100;
 
   bool get stepFree => !hasStairs;
+
+  /// The loudest walkway on the route, used for the sensory-safe warning.
+  NoiseLevel get worstNoise => edges.isEmpty
+      ? NoiseLevel.quiet
+      : edges
+            .map((edge) => edge.noiseLevel)
+            .reduce((a, b) => a.index >= b.index ? a : b);
+
+  /// The glariest walkway on the route.
+  LightLevel get worstLight => edges.isEmpty
+      ? LightLevel.shaded
+      : edges
+            .map((edge) => edge.lightLevel)
+            .reduce((a, b) => a.index >= b.index ? a : b);
+
+  /// Share of the route that carries tactile paving (0-100).
+  double get tactilePercent {
+    if (distanceMeters <= 0) return 0;
+    var tactile = 0.0;
+    for (final edge in edges) {
+      if (edge.hasTactilePaving) tactile += edge.lengthMeters;
+    }
+    return (tactile / distanceMeters * 100).clamp(0, 100);
+  }
+
+  /// True when every walkway on the route is calm enough for sound-sensitive
+  /// and light-sensitive travellers.
+  bool get sensorySafe =>
+      edges.every((edge) => !edge.noiseLevel.isLoud && !edge.lightLevel.isHarsh);
+
+  /// True when the whole route can be served by the mapOKU buggy service.
+  bool get buggyFriendly =>
+      edges.every((edge) => edge.buggyAccessible && !edge.hasStairs);
+}
+
+/// The extra constraints a traveller's needs place on route scoring.
+///
+/// The trip planner builds this from the chosen accessibility need and hands it
+/// to [AccessiblePathfinder.findPath], so sound, light, tactile and buggy
+/// requirements all bend the same A* search.
+class RouteProfile {
+  const RouteProfile({
+    this.stepFree = false,
+    this.avoidNoise = false,
+    this.avoidBright = false,
+    this.needsTactile = false,
+    this.needsBuggy = false,
+  });
+
+  /// No extra constraints: the plain shortest path.
+  static const RouteProfile neutral = RouteProfile();
+
+  /// Avoid stairs entirely (wheelchair, crutches, buggy).
+  final bool stepFree;
+
+  /// Route around noisy zones (autistic / ADHD sound-sensitive travellers).
+  final bool avoidNoise;
+
+  /// Route around glare and direct sun (light-sensitive travellers).
+  final bool avoidBright;
+
+  /// Prefer tactile paving (white-cane users).
+  final bool needsTactile;
+
+  /// Only wide, step-free walkways the buggy can drive.
+  final bool needsBuggy;
 }
 
 /// A* pathfinding tuned for OKU / wheelchair wayfinding over real coordinates.
@@ -61,6 +127,7 @@ class AccessiblePathfinder {
   PathResult? findPath({
     required SimeDarbyHub hub,
     required bool accessibleOnly,
+    RouteProfile profile = RouteProfile.neutral,
     Set<HubEdge> blockedEdges = const <HubEdge>{},
   }) {
     final nodes = {for (final node in hub.nodes) node.id: node};
@@ -80,7 +147,12 @@ class AccessiblePathfinder {
     // between nodes, so a plain euclidean heuristic would overestimate and make
     // A* suboptimal. Deriving the cheapest "cost per metre" across usable edges
     // keeps the straight-line estimate a true lower bound.
-    final heuristicScale = _heuristicScale(nodes, adjacency, accessibleOnly);
+    final heuristicScale = _heuristicScale(
+      nodes,
+      adjacency,
+      accessibleOnly,
+      profile,
+    );
 
     final gScore = <String, double>{start: 0};
     final cameFrom = <String, (String, HubEdge)>{};
@@ -107,7 +179,7 @@ class AccessiblePathfinder {
         final next = edge.from == current ? edge.to : edge.from;
         if (closed.contains(next)) continue;
 
-        final stepCost = _edgeCost(edge, accessibleOnly);
+        final stepCost = _edgeCost(edge, accessibleOnly, profile);
         if (stepCost.isInfinite) continue;
 
         final tentative = (gScore[current] ?? double.infinity) + stepCost;
@@ -128,11 +200,12 @@ class AccessiblePathfinder {
     Map<String, HubNode> nodes,
     Map<String, List<HubEdge>> adjacency,
     bool accessibleOnly,
+    RouteProfile profile,
   ) {
     var scale = double.infinity;
     for (final edges in adjacency.values) {
       for (final edge in edges) {
-        final cost = _edgeCost(edge, accessibleOnly);
+        final cost = _edgeCost(edge, accessibleOnly, profile);
         if (!cost.isFinite) continue;
         final from = nodes[edge.from];
         final to = nodes[edge.to];
@@ -165,14 +238,49 @@ class AccessiblePathfinder {
     return (g[id] ?? double.infinity) + heuristic;
   }
 
-  double _edgeCost(HubEdge edge, bool accessibleOnly) {
-    if (accessibleOnly) {
-      // Wheelchair users simply cannot use stairs.
-      if (edge.hasStairs) return double.infinity;
-      // Prefer covered, weather-protected walkways.
-      return edge.covered ? edge.lengthMeters * 0.9 : edge.lengthMeters;
+  /// Cost of walking [edge] for the given traveller.
+  ///
+  /// [accessibleOnly] is the wheelchair switch: stairs are impassable and
+  /// covered walkways score better. [profile] layers the sensory, tactile and
+  /// buggy rules on top. Loud or glaring walkways are excluded outright at the
+  /// worst band, tactile paving is rewarded for white-cane users, and narrow
+  /// walkways are heavily penalised for the buggy service.
+  double _edgeCost(HubEdge edge, bool accessibleOnly, RouteProfile profile) {
+    if (edge.hasStairs) {
+      if (accessibleOnly || profile.stepFree || profile.needsBuggy) {
+        return double.infinity;
+      }
     }
-    return edge.lengthMeters;
+
+    var cost = edge.lengthMeters;
+
+    if (accessibleOnly || profile.stepFree) {
+      // Prefer covered, weather-protected walkways.
+      if (edge.covered) cost *= 0.9;
+    }
+
+    if (profile.avoidNoise) {
+      if (edge.noiseLevel == NoiseLevel.veryNoisy) return double.infinity;
+      if (edge.noiseLevel == NoiseLevel.noisy) cost *= 4.5;
+      if (edge.noiseLevel == NoiseLevel.quiet) cost *= 0.8;
+    }
+
+    if (profile.avoidBright) {
+      if (edge.lightLevel == LightLevel.veryBright) return double.infinity;
+      if (edge.lightLevel == LightLevel.bright) cost *= 3.0;
+      if (edge.lightLevel == LightLevel.shaded) cost *= 0.85;
+    }
+
+    if (profile.needsTactile) {
+      cost *= edge.hasTactilePaving ? 0.75 : 1.8;
+    }
+
+    if (profile.needsBuggy) {
+      if (!edge.buggyAccessible) return double.infinity;
+      if (edge.widthMeters < 2.0) cost *= 2.5;
+    }
+
+    return cost;
   }
 
   /// Rebuilds the winning path and concatenates each edge's real geometry so

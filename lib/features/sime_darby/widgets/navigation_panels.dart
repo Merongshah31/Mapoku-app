@@ -22,6 +22,20 @@ IconData stepIcon(HubNode next) => switch (next.kind) {
   _ => Icons.straight,
 };
 
+/// Full sentence spoken aloud for the step that leads to [next], including the
+/// distance to walk first. This is what the text-to-speech engine reads out on
+/// every step for blind and low-vision travellers.
+String spokenInstruction(HubNode next, double metres) {
+  final distance = AccessiblePathfinder.formatDistance(metres);
+  return switch (next.kind) {
+    NodeKind.lift => 'In $distance, take the lift at ${next.label}.',
+    NodeKind.ramp => 'In $distance, use the ramp at ${next.label}.',
+    NodeKind.crossing => 'In $distance, cross at ${next.label}.',
+    NodeKind.bridge => 'In $distance, take the bridge to ${next.label}.',
+    _ => 'In $distance, head to ${next.label}.',
+  };
+}
+
 /// Top card while navigating: what to do next and how far it is.
 class NavigationBanner extends StatelessWidget {
   const NavigationBanner({
@@ -163,6 +177,8 @@ class NavigationPanel extends StatelessWidget {
     required this.onNext,
     required this.onEnd,
     required this.onReport,
+    this.voiceEnabled = true,
+    this.onToggleVoice,
   });
 
   final PathResult route;
@@ -170,6 +186,10 @@ class NavigationPanel extends StatelessWidget {
   final VoidCallback onNext;
   final VoidCallback onEnd;
   final VoidCallback onReport;
+
+  /// Real-time spoken step guidance (blind / low-vision travellers).
+  final bool voiceEnabled;
+  final VoidCallback? onToggleVoice;
 
   @override
   Widget build(BuildContext context) {
@@ -238,6 +258,25 @@ class NavigationPanel extends StatelessWidget {
                     ],
                   ),
                 ),
+                IconButton(
+                  tooltip: voiceEnabled
+                      ? 'Turn step-by-step voice off'
+                      : 'Turn step-by-step voice on',
+                  onPressed: onToggleVoice,
+                  style: IconButton.styleFrom(
+                    backgroundColor: voiceEnabled
+                        ? AppColors.mint
+                        : AppColors.field,
+                    minimumSize: const Size(48, 48),
+                  ),
+                  icon: Icon(
+                    voiceEnabled ? Icons.volume_up : Icons.volume_off,
+                    color: voiceEnabled
+                        ? AppColors.primary
+                        : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 IconButton(
                   tooltip: 'Report an obstacle here',
                   onPressed: onReport,
