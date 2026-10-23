@@ -101,7 +101,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               Expanded(
                 child: Column(
@@ -110,6 +110,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
                     Text(
                       'Reports',
                       style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Status: Active community updates',
+                      style: kFootnoteStyle.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -123,6 +131,36 @@ class _ReportsScreenState extends State<ReportsScreen> {
             ],
           ),
           const SizedBox(height: 16),
+          AppGroup(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+                child: Row(
+                  children: [
+                    const Icon(
+                      CupertinoIcons.exclamationmark_triangle_fill,
+                      color: AppColors.accentText,
+                      size: 18,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        mine
+                            ? 'Track your report verification status in real time.'
+                            : 'Community reports update continuously as members confirm or clear obstacles.',
+                        style: kFootnoteStyle.copyWith(
+                          fontSize: 13,
+                          color: AppColors.textPrimary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
           FilledButton.icon(
             onPressed: _newReport,
             icon: const Icon(CupertinoIcons.add, size: 20),
